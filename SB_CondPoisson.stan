@@ -83,7 +83,10 @@ model {
     // finally
     // if there are some variables that are not spatial you could do this differently
     // for some, so ifelse is_spatial 1/0 eiterh mu or beta_star etc
-     vector[K] beta = mu + beta_star[,j];
+
+    vector[K] beta = mu + sigma[j] * beta_star[,j];
+    // UPDATED TO INCLUDE SIGMA[J] AFTER LOOKING AT THEIR CODE
+    // IS THIS CORRECT ?? DIFFERENT FROM WHAT IT SAYS IN THE PAPER
   
     // ********************************
     // from Armstrong 2014, equation (4)
