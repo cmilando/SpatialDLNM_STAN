@@ -1,11 +1,11 @@
 library(dlnm)
+library(gnm)
 library(splines)
 library(rstan)
 library(cmdstanr)
 library(tidyverse)
 library(foreign) # ENABLES READING THE DATA FILE, WHICH IS A STATA FORMAT
 
-#' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
 #' Run model
 #' ============================================================================
@@ -27,29 +27,12 @@ data$month <- months(data$date)
 data$year <- format(data$date, format = "%Y")
 data$dow <- weekdays(data$date)
 
-# subset for Excel application
+# subset for demonstration
 data <- subset(data, dow %in% c("Monday", "Tuesday") & 
                  year %in% c("2002", "2003", "2004"))
 data$stratum <- interaction(data$year, data$month, data$dow)
 length(levels(data$stratum))
 data <- data[order(data$date), ]
-
-# FIT UNCONDITIONAL POISSON MODEL
-model_upr <- glm(numdeaths ~ ozone10 + temperature + factor(stratum), 
-                 data = data, family = poisson)
-summary(model_upr)
-
-# FIT A CONDITIONAL POISSON MODEL WITH A YEAR X MONTH X DOW STRATA
-library(gnm)
-modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
-                 data = data, family = poisson, eliminate = factor(stratum))
-summary(modelcpr1)
-attr(modelcpr1$coefficients, "eliminated")
-
-
-# yeah this is the one
-# https://mc-stan.org/docs/2_20/functions-reference/multinomial-distribution.html
-# 
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -57,25 +40,26 @@ attr(modelcpr1$coefficients, "eliminated")
 #' ============================================================================
 #' #' /////////////////////////////////////////////////////////////////////////
 
+# n regions
+J = as.integer(2)
+
 # nrows
 N = as.integer(nrow(data))
 
-# beta and the intercept
+# beta values, withouth the intercept
 K = as.integer(2)
 
 # include the intercept
 X1 = as.matrix(data[, c('ozone10', 'temperature')])
-head(X)
 X2 = X1
 X = array(dim = c(dim(X1), 2))
 X[,,1] = X1
 X[,,2] = X2
 
-# outcome
+# outcome in two regions
 y1 = as.integer(data$numdeaths)
 y2 = y1
 y = cbind(y1, y2)
-# y <- matrix(y[, 1], nrow = length(y1), ncol = 1)
 
 # create S matrix 
 getSmat <- function(strata_vector, include_self = T) {
@@ -99,7 +83,6 @@ getSmat <- function(strata_vector, include_self = T) {
 #
 S <- getSmat(data$stratum, include_self = T)
 head(S)
-
 
 # get strata vars
 n_strata <- as.integer(length(unique(data$stratum))) # 72, cool
@@ -125,8 +108,7 @@ stratum_id
 # this is an adjacency matrix that DOES NOT include itself
 Jvec <- c(1, 2)
 Jmat <- matrix(as.integer(c(0, 1, 1, 0)), nrow = 2)
-# Jmat <- matrix(Jmat[1, 1], nrow = 1, ncol = 1)
-# Jmat
+
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -135,7 +117,7 @@ Jmat <- matrix(as.integer(c(0, 1, 1, 0)), nrow = 2)
 #' #' /////////////////////////////////////////////////////////////////////////
 
 stan_data <- list(
-  J = as.integer(2),
+  J = J,
   Jmat = Jmat,
   N = N, 
   K = K, 
@@ -173,17 +155,18 @@ data.frame(head(draws_df))
 
 # sick that seems to work
 apply(draws_df %>% select(starts_with("beta_out")), 2, median)
+
+modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
+                 data = data, family = quasipoisson, 
+                 eliminate = factor(stratum))
 coef(modelcpr1)
 
-#
+# q
 apply(draws_df %>% select(starts_with("q")), 2, summary)
 
 # IT WORKS!!!!! WELL DONE :)
 
 # ok now check variance of over-dispersion as well
-modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
-                 data = data, family = quasipoisson, 
-                 eliminate = factor(stratum))
 summary(modelcpr1)
 
 apply(draws_df %>% select(starts_with("disp")), 2, summary)

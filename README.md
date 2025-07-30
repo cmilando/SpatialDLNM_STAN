@@ -1,3 +1,3 @@
 # SpatialDLNM_STAN
 
-check out `02_test3.R` for a 2 case test
+check out `03_test_SB_CondPois.R` for a 2 case test

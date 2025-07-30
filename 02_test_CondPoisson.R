@@ -107,7 +107,7 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("CondPoisson_v0.stan")
+stan_model <- cmdstan_model("CondPoisson.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
