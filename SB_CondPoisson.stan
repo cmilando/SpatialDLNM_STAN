@@ -1,21 +1,22 @@
 data {
+    // First for the spatial component you'll need something similar
+  int<lower=1> J; // regions, and each of the params will need a J
+  matrix[J, J] Jmat; // Has to be a matrix so you can do math on it
   
   // Basic params
-  int<lower=1> N;          // Number of rows of data
-  int<lower=1> K;          // Number of model coefficients, NO intercept
-  matrix[N, K] X;          // matrix of model parameters, NO intercept
-  array[N] int<lower=0> y;         // fractional outcomes, out i / sum(out i in strata)
+  int<lower=1> N;               // Number of rows of data
+  int<lower=1> K;               // Number of model coefficients, NO intercept
+  array[N, K, J] real X;        // matrix of model parameters, NO intercept
+  array[N, J] int<lower=0> y;   // outcomes
   
   // Now for the strata,  you need some way to signal which rows
   // are in the strata and subset to those
   // -- might be easy just to do a matrix multiplication but with 1s and 0s
-  matrix[N, N] S;              // the matrix of strata, 
+  // NOTE IMPORTANT: THESE MUST BE THE SAME FOR EACH STRATA !!!
+  matrix[N, N] S;              // the matrix of strata, has to be matrix so you can do math
   int<lower=1> n_strata;
   int<lower=1> max_in_strata;
   array[n_strata, max_in_strata] int S_condensed;
-  
-  // Finally for the spatial component you'll need something similar
-  int<lower=1> J; // regions, and each of the params will need a J
 }
 
 parameters {
@@ -24,8 +25,7 @@ parameters {
   //  and a single centering value for sigma
   vector[K] mu;
   array[K] real<lower=0> sigma;
-  array[K] real<lower=0> star_mean;
-  
+
   // the Leroux value, just one
   real<lower=0,upper=1> q;
   
@@ -38,9 +38,8 @@ model {
   
   // set priors
   mu ~ normal(0, 1);
-  sigma ~ normal(0, 1);
-  star_mean ~ normal(0, 1);
-  
+  q ~ normal(0, 1) T[0, 1]; // add limits here
+  sigma ~ normal(0, 1) T[0, ]; // add here limits
 
   // ********************************
   // OK SO THE MAIN DIFFERENCE TO GET TO Spatial is to adjust the Betas
@@ -54,15 +53,26 @@ model {
     for(k in 1:K) {
       // ** J is region
       // ** K is beta cofficient
-      // ** so each has all K, but only some other J
-      // so there should be a J index lookup function that gets each one's neighbors
-      // so for J = 1, that should return the indices of its neigbhors so 2, 3, 4
-      // and 
-      //real Beta_Sum = 1; // this will eventually be a result of the lookup
-      //real n_a = 1;
-      //real star_mean = 0;
-      //real star_sd = sigma[k] / (1 - q + q * n_a);
-      beta_star[k,j] ~ normal(star_mean[k], sigma[k]);
+      
+      // So FIRST, get the sum of BETA STAR neighors that aren't the current one
+      // this gets the dot product
+      // beta_star needs to be WITHIN k because you are going within each coefficient
+      // but across space (so across the j dimension), and then ` transpose
+      real beta_star_sum = Jmat[j, ] * beta_star[k, ]'; 
+      
+      // next get n_a, which is just the sum of this row of Jmat
+      real n_a = sum(Jmat[j, ]);
+      
+      // now you should be able to get the mean and var
+      real denom = 1 + q - q * n_a;
+      
+      // Now contruct the beta star mean and sigma
+      // remember to square root denom in sigma
+      real star_mean = q / denom * beta_star_sum;
+      real star_sd = sigma[k] / (sqrt(denom));
+      
+      // and re-draw
+      beta_star[k,j] ~ normal(star_mean, star_sd);
     }
   }
   
@@ -77,9 +87,9 @@ model {
     // theta = exp(X*beta) / sum( exp(X*beta) for all strata)
     
     // first get get the numerator:
-    // ok so X is N x K, and beta is K x 1
+    // ok so X[,,J] is N x K, and beta is K x 1
     // so this turns into N x 1
-    vector[N] xBeta = exp(X * beta);
+    vector[N] xBeta = exp(to_matrix(X[, ,j]) * beta);
     
     // then I think with matrix math you can get the bottom in one shot
     // S is N x N and xBeta is N x 1
@@ -102,22 +112,37 @@ model {
        }
        array[k_not_zero] int my_array = all_indices[1:k_not_zero];
       
+       // check that sum theta is ALWAYS = 1 and
        // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
-       if(sum(y[my_array]) > 0) {
+       if(sum(y[my_array, j]) > 0) {
       
          // just get the values for this strata
-         target += multinomial_lpmf(y[my_array] | theta[my_array]);
+         target += multinomial_lpmf(y[my_array, j] | theta[my_array]);
        
        }
     } 
   } // J
 }
 
-
+generated quantities {
+  
 // GENERATED QUANTITIES
 
 // (1) make a new BETA by randomly sampling from mu and beta_star
-
 // (2) apparently you can handle over-dispersion in post-processing as per STATA
 // code, so lets just do that instead of direhclt, which could be another
 // options
+
+  matrix[K, J] beta_out;
+  
+  for(k in 1:K) {
+    for(j in 1:J) {
+      beta_out[k,j] = mu[k] + beta_star[k,j]; // probably some additional variance here
+    }
+  }
+  
+
+  
+}
+
+

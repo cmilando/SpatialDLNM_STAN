@@ -5,6 +5,12 @@ library(cmdstanr)
 library(tidyverse)
 library(foreign) # ENABLES READING THE DATA FILE, WHICH IS A STATA FORMAT
 
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Run model
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+#' 
 data <- read.dta("https://raw.github.com/gasparrini/2014_armstrong_BMCmrm_codedata/master/londondataset2002_2006.dta")
 
 # SET THE DEFAULT ACTION FOR MISSING DATA TO na.exclude
@@ -28,24 +34,6 @@ data$stratum <- interaction(data$year, data$month, data$dow)
 length(levels(data$stratum))
 data <- data[order(data$date), ]
 
-# create S matrix 
-getSmat <- function(strata_vector) {
-  
-  # strata_vector <- data$stratum 
-  strata_matrix <- matrix(as.integer(strata_vector), 
-                          nrow = length(strata_vector),
-                          ncol = length(strata_vector), 
-                          byrow = T)
-  
-  for(i in 1:length(strata_vector)) {
-    strata_matrix[i, ] = 1*(strata_matrix[i, ] == as.integer(strata_vector[i]))
-  }
-  
-  return(strata_matrix)
-}
-
-
-
 # FIT UNCONDITIONAL POISSON MODEL
 model_upr <- glm(numdeaths ~ ozone10 + temperature + factor(stratum), 
                  data = data, family = poisson)
@@ -63,6 +51,11 @@ attr(modelcpr1$coefficients, "eliminated")
 # https://mc-stan.org/docs/2_20/functions-reference/multinomial-distribution.html
 # 
 
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' SETUP inputs
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
 
 # nrows
 N = as.integer(nrow(data))
@@ -71,14 +64,42 @@ N = as.integer(nrow(data))
 K = as.integer(2)
 
 # include the intercept
-X = as.matrix(data[, c('ozone10', 'temperature')])
+X1 = as.matrix(data[, c('ozone10', 'temperature')])
 head(X)
+X2 = X1
+X = array(dim = c(dim(X1), 2))
+X[,,1] = X1
+X[,,2] = X2
 
 # outcome
-y = as.integer(data$numdeaths)
+y1 = as.integer(data$numdeaths)
+y2 = y1
+y = cbind(y1, y2)
+# y <- matrix(y[, 1], nrow = length(y1), ncol = 1)
+
+# create S matrix 
+getSmat <- function(strata_vector, include_self = T) {
+  
+  # strata_vector <- data$stratum 
+  strata_matrix <- matrix(as.integer(strata_vector), 
+                          nrow = length(strata_vector),
+                          ncol = length(strata_vector), 
+                          byrow = T)
+  
+  for(i in 1:length(strata_vector)) {
+    strata_matrix[i, ] = 1*(strata_matrix[i, ] == as.integer(strata_vector[i]))
+    if(!include_self) {
+      strata_matrix[i, i] = 0
+    }
+  }
+  
+  return(strata_matrix)
+}
 
 #
-S <- getSmat(data$stratum)
+S <- getSmat(data$stratum, include_self = T)
+head(S)
+
 
 # get strata vars
 n_strata <- as.integer(length(unique(data$stratum))) # 72, cool
@@ -95,7 +116,23 @@ S_list <- lapply(S_list, function(l) {
 S_condensed <- unique(do.call(rbind, S_list))
 dim(S_condensed)
 
+# ok now do the same as include self but with J matrix
+# start simple and you can generalize later
+# this is an adjacency matrix that DOES NOT include itself
+Jvec <- c(1, 2)
+Jmat <- matrix(as.integer(c(0, 1, 1, 0)), nrow = 2)
+# Jmat <- matrix(Jmat[1, 1], nrow = 1, ncol = 1)
+# Jmat
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Run STAN
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
 stan_data <- list(
+  J = as.integer(2),
+  Jmat = Jmat,
   N = N, 
   K = K, 
   X = X, 
@@ -103,8 +140,7 @@ stan_data <- list(
   S = S,
   n_strata = n_strata,
   max_in_strata = max_in_strata,
-  S_condensed = S_condensed,
-  J = as.integer(1)
+  S_condensed = S_condensed
 )
 
 # Set path to model
@@ -112,19 +148,29 @@ stan_model <- cmdstan_model("SB_CondPoisson.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
-  chains = 1,
-  parallel_chains = 1, 
+  chains = 2,
+  parallel_chains = 2 
 )
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Output
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
 
 ## 
 draws_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
-head(draws_df)
+data.frame(head(draws_df))
 
 # sick that seems to work
-apply(draws_df %>% select(starts_with("mu")), 2, median) + 
-  apply(draws_df %>% select(starts_with("beta")), 2, median)
-
+apply(draws_df %>% select(starts_with("beta_out")), 2, median)
 coef(modelcpr1)
+
+#
+apply(draws_df %>% select(starts_with("q")), 2, summary)
+
+# IT WORKS!!!!! WELL DONE :)
