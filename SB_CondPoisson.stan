@@ -113,6 +113,11 @@ model {
   } // J
 }
 
-// apparently you can handle dispersion in post-processing as per STATA
+
+// GENERATED QUANTITIES
+
+// (1) make a new BETA by randomly sampling from mu and beta_star
+
+// (2) apparently you can handle over-dispersion in post-processing as per STATA
 // code, so lets just do that instead of direhclt, which could be another
 // options
