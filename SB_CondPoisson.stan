@@ -17,6 +17,7 @@ data {
   int<lower=1> n_strata;
   int<lower=1> max_in_strata;
   array[n_strata, max_in_strata] int S_condensed;
+  array[N] int<lower=0> stratum_id;
 }
 
 parameters {
@@ -61,6 +62,8 @@ model {
       real beta_star_sum = Jmat[j, ] * beta_star[k, ]'; 
       
       // next get n_a, which is just the sum of this row of Jmat
+      // HMM DOES THIS INCLUDE ITSELF? Or is this what the 1 is for?
+      // You could always add 1 if so
       real n_a = sum(Jmat[j, ]);
       
       // now you should be able to get the mean and var
@@ -126,13 +129,7 @@ model {
 
 generated quantities {
   
-// GENERATED QUANTITIES
-
-// (1) make a new BETA by randomly sampling from mu and beta_star
-// (2) apparently you can handle over-dispersion in post-processing as per STATA
-// code, so lets just do that instead of direhclt, which could be another
-// options
-
+  // (1) make a new BETA by randomly sampling from mu and beta_star
   matrix[K, J] beta_out;
   
   for(k in 1:K) {
@@ -141,8 +138,54 @@ generated quantities {
     }
   }
   
+  // (2) apparently you can handle over-dispersion in post-processing as per STATA
+  // code, so lets just do that instead of direhclt, which could be another
+  // options
+  /// Lets see if this works
+  /// Converted to STAN from STATA code from Gasp and Armstrong using ChatGPT
+  /// and Qc'd
+  array[J] real dispersion;
+  array[J] real pearson_x2;
+  int df_resid = N - K - n_strata;
 
-  
+  array[N] real pred_rescaled;     // rescaled to match stratum totals
+
+  for (j in 1:J) {
+    
+    // predicted counts before stratum normalization
+    vector[N] xBeta = exp(to_matrix(X[, , j]) * beta_out[,j]);  
+
+    vector[n_strata] sum_y_stratum = rep_vector(0, n_strata);
+    vector[n_strata] sum_pred_stratum = rep_vector(0, n_strata);
+
+    // Sum observed and predicted counts per stratum
+    for (n in 1:N) {
+      int s = stratum_id[n];
+      sum_y_stratum[s] += y[n, j];
+      sum_pred_stratum[s] += xBeta[n];
+    }
+
+    // Rescale predictions so that the sum of the predicted in each group
+    // equals the sum of the observed in each group
+    for (n in 1:N) {
+      int s = stratum_id[n];
+      if (sum_pred_stratum[s] > 1e-8) {
+        pred_rescaled[n] = xBeta[n] * sum_y_stratum[s] / sum_pred_stratum[s];
+      } else {
+        pred_rescaled[n] = xBeta[n];
+      }
+    }
+
+    // Compute Pearson χ² for this region
+    pearson_x2[j] = 0;
+    for (n in 1:N) {
+      if (pred_rescaled[n] > 1e-8) {
+        pearson_x2[j] += square(y[n, j] - pred_rescaled[n]) / pred_rescaled[n];
+      }
+    }
+
+    // Compute dispersion for this region
+    dispersion[j] = pearson_x2[j] / df_resid;
+  }
 }
-
-
+  

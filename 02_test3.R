@@ -116,6 +116,10 @@ S_list <- lapply(S_list, function(l) {
 S_condensed <- unique(do.call(rbind, S_list))
 dim(S_condensed)
 
+#
+stratum_id = as.integer(data$stratum)
+stratum_id
+
 # ok now do the same as include self but with J matrix
 # start simple and you can generalize later
 # this is an adjacency matrix that DOES NOT include itself
@@ -140,7 +144,8 @@ stan_data <- list(
   S = S,
   n_strata = n_strata,
   max_in_strata = max_in_strata,
-  S_condensed = S_condensed
+  S_condensed = S_condensed,
+  stratum_id = stratum_id
 )
 
 # Set path to model
@@ -174,3 +179,11 @@ coef(modelcpr1)
 apply(draws_df %>% select(starts_with("q")), 2, summary)
 
 # IT WORKS!!!!! WELL DONE :)
+
+# ok now check variance of over-dispersion as well
+modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
+                 data = data, family = quasipoisson, 
+                 eliminate = factor(stratum))
+summary(modelcpr1)
+
+apply(draws_df %>% select(starts_with("disp")), 2, summary)
