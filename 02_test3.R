@@ -94,7 +94,7 @@ S_list <- lapply(S_list, function(l) {
 })
 S_condensed <- unique(do.call(rbind, S_list))
 dim(S_condensed)
-  
+
 stan_data <- list(
   N = N, 
   K = K, 
@@ -103,16 +103,17 @@ stan_data <- list(
   S = S,
   n_strata = n_strata,
   max_in_strata = max_in_strata,
-  S_condensed = S_condensed
+  S_condensed = S_condensed,
+  J = as.integer(1)
 )
 
 # Set path to model
-stan_model <- cmdstan_model("CondPoisson_v0.stan")
+stan_model <- cmdstan_model("SB_CondPoisson.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 1,
-  parallel_chains = 4, 
+  parallel_chains = 1, 
 )
 
 ## 
@@ -123,5 +124,7 @@ draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
 
 # sick that seems to work
-apply(draws_df %>% select(starts_with("beta")), 2, median)
+apply(draws_df %>% select(starts_with("mu")), 2, median) + 
+  apply(draws_df %>% select(starts_with("beta")), 2, median)
+
 coef(modelcpr1)
