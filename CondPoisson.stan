@@ -20,15 +20,18 @@ parameters {
   vector[K] beta;  // attribute effects 
 }
 
-model {
-
+transformed parameters {
   // from Armstrong 2014, equation (4)
   // theta = exp(X*beta) / sum( exp(X*beta) for all strata)
   
   // first get get the numerator:
   // ok so X is N x K, and beta is K x 1
   // so this turns into N x 1
-  vector[N] xBeta = exp(X * beta);
+  // UPDATE added block to keep exp(inf) or exp(-info)
+  vector[N] xBeta_raw = X * beta;
+  vector[N] xBeta;
+  for (n in 1:N)
+    xBeta[n] = exp(fmin(20, fmax(xBeta_raw[n], -20)));
   
   // then I think with matrix math you can get the bottom in one shot
   // S is N x N and xBeta is 
@@ -38,6 +41,10 @@ model {
   // have to use element division
   vector[N] theta = xBeta ./ denominator;
   
+}
+
+model {
+
   // now set priors
   beta ~ normal(0, 5);
 

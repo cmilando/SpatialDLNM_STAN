@@ -112,7 +112,7 @@ stan_model <- cmdstan_model("CondPoisson.stan")
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 1,
-  parallel_chains = 4, 
+  parallel_chains = 1, 
 )
 
 ## 
