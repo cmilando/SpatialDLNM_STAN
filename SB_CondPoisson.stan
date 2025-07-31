@@ -50,8 +50,8 @@ model {
   // Beta*[a,c] ~ Normal( q / (1 - q + q*n_a) * Sum(B_a,c w/o B), 
   // VARIANCE =                     sigma_c^2  / (1 - q + q*n_a) )
   // so you will have to take the square-root to get sd
-  for(j in 1:J) {
-    for(k in 1:K) {
+  for(j in 1:1) {
+    for(k in 1:1) {
       // ** J is region
       // ** K is beta cofficient
       
@@ -65,9 +65,10 @@ model {
       // HMM DOES THIS INCLUDE ITSELF? Or is this what the 1 is for?
       // You could always add 1 if so
       real n_a = sum(Jmat[j, ]);
-      
+
       // now you should be able to get the mean and var
-      real denom = 1 + q - q * n_a;
+      // hm how is this sometimes negative?
+      real denom = 1 - q + q * n_a;
       
       // Now contruct the beta star mean and sigma
       // remember to square root denom in sigma
@@ -76,15 +77,19 @@ model {
       
       // and re-draw
       beta_star[k,j] ~ normal(star_mean, star_sd);
+      
     }
   }
-  
+
   for(j in 1:J) {
     // finally
     // if there are some variables that are not spatial you could do this differently
     // for some, so ifelse is_spatial 1/0 eiterh mu or beta_star etc
 
-    vector[K] beta = mu + sigma[j] * beta_star[,j];
+    vector[K] beta;
+    for(k in 1:K) {
+      beta[k] = mu[k] + sigma[k] * beta_star[k,j];
+    }
     // UPDATED TO INCLUDE SIGMA[J] AFTER LOOKING AT THEIR CODE
     // IS THIS CORRECT ?? DIFFERENT FROM WHAT IT SAYS IN THE PAPER
   

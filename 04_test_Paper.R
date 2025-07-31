@@ -29,24 +29,15 @@ library(sf)
 library(spdep)
 library(lubridate)
 library(dlnm)
-
+library(gnm)
+library(splines)
+library(rstan)
+library(cmdstanr)
+library(tidyverse)
+library(foreign)
 # Load data
 
 load("input/daily_data.RData")
-shapefile_bcn <- read_sf("input/shapefile_bcn.shp")
-
-# Generate a list of spatial structure from the shapefile for use in WinBUGS.
-list_neig <- nb2WB(poly2nb(shapefile_bcn))
-
-## *** THIS BECOMES THE J MATRIX
-list_neig
-
-# n = list_neig$num, # number of neighbours of each region
-# sum_n = sum(list_neig$num), # total number of neighbouring relationships
-# r_prime = list_neig$adj, # vector of neighbouring relationships
-# index_r = c(0, cumsum(list_neig$num))
-
-## ******
 
 # Set variables defining the dlnm model
 
@@ -102,31 +93,133 @@ list_cb <- lapply(formatC(1:dlnm_var$n_reg, width = 2, flag = "0"),
         cb
         
       })
-cb <- do.call(rbind, list_cb)
 
-
-# Create different objects for the case-crossover and time-series designs
-data_cco <- data; 
-cb_cco <- cb
 
 # PREPARE DATA FOR THE CASE-CROSSOVER DESIGN
 
 # Create strata for the case-crossover
 # (neighborhood - year - month - day of week)
-data_cco$strata <- paste(data_cco$region, 
-                         year(data_cco$date), 
-                         formatC(month(data_cco$date), width = 2, flag = "0"),
-                         wday(data_cco$date, week_start = 1),
+data$strata <- paste(data$region, 
+                         year(data$date), 
+                         formatC(month(data$date), width = 2, flag = "0"),
+                         wday(data$date, week_start = 1),
                          sep = ":")
 
-################################################################################
-# CODE 2: RUN B-DLNMs AND SB-DLNMs
-# Model specification and execution: independent B-DLNMs and SB-DLNMs in R and
-# WinBUGS with simulated mortality data.
-################################################################################
+# make them both lists
+data_l <- split(data, f = data$region)
 
-# Load libraries
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' SETUP inputs
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
+# n regions
+J = as.integer(length(data_l))
+
+# nrows
+N = as.integer(nrow(data_l[[1]]))
+
+# beta values, withouth the intercept
+K = as.integer(ncol(list_cb[[1]]))
+
+# include the intercept
+X = array(dim = c(dim(list_cb[[1]]), J))
+for(j in 1:J) X[,,j] = as.matrix(list_cb[[j]])
+
+# outcome in two regions
+y = array(dim = c(nrow(list_cb[[1]]), J))
+for(j in 1:J) y[,j] = data_l[[j]]$mort
+
+# create S matrix 
+getSmat <- function(strata_vector, include_self = T) {
+  
+  # strata_vector <- data$stratum 
+  strata_matrix <- matrix(as.integer(strata_vector), 
+                          nrow = length(strata_vector),
+                          ncol = length(strata_vector), 
+                          byrow = T)
+  
+  for(i in 1:length(strata_vector)) {
+    strata_matrix[i, ] = 1*(strata_matrix[i, ] == as.integer(strata_vector[i]))
+    if(!include_self) {
+      strata_matrix[i, i] = 0
+    }
+  }
+  
+  return(strata_matrix)
+}
+
+#
+S <- getSmat(factor(data_l[[1]]$strata), include_self = T)
+head(S)
+
+# get strata vars
+n_strata <- as.integer(length(unique(data_l[[1]]$strata))) # 72, cool
+S_list <- apply(S, 1, function(x) which(x == 1))
+max_in_strata <- max(sapply(S_list, length))
+S_list <- lapply(S_list, function(l) {
+  if(length(l) == max_in_strata) {
+    return(l)
+  } else {
+    diff_n = max_in_strata - length(l)
+    return(c(l, rep(0, times = diff_n)))
+  }
+})
+S_condensed <- unique(do.call(rbind, S_list))
+dim(S_condensed)
+
+#
+stratum_id = as.integer(factor(data_l[[1]]$strata))
+stratum_id
+
+## *** THIS BECOMES THE J MATRIX
+# ok now do the same as include self but with J matrix
+# start simple and you can generalize later
+# this is an adjacency matrix that DOES NOT include itself
+shapefile_bcn <- read_sf("input/shapefile_bcn.shp")
+
+# Generate a list of spatial structure from the shapefile for use in WinBUGS.
+list_neig <- nb2listw(poly2nb(shapefile_bcn))
+
+neighbors <- lapply(list_neig$neighbours,c)
+Jmat <- matrix(0, nrow = J, ncol = J)
+
+for(j in 1:J) {
+    Jmat[j, neighbors[[j]]] <- 1
+}
+head(Jmat)
+## ******
 
 
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Run STAN
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
+stan_data <- list(
+  J = J,
+  Jmat = Jmat,
+  N = N, 
+  K = K, 
+  X = X, 
+  y = y,
+  S = S,
+  n_strata = n_strata,
+  max_in_strata = max_in_strata,
+  S_condensed = S_condensed,
+  stratum_id = stratum_id
+)
+
+# Set path to model
+stan_model <- cmdstan_model("SB_CondPoisson.stan")
+
+out1 <- stan_model$sample(
+  data = stan_data,
+  chains = 1,
+  parallel_chains = 1 
+)
 
 
