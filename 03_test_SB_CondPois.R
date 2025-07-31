@@ -151,7 +151,7 @@ draws_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
-data.frame(head(draws_df))
+
 
 # sick that seems to work
 apply(draws_df %>% select(starts_with("beta_out")), 2, median)

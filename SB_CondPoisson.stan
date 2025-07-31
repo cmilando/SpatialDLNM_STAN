@@ -50,8 +50,8 @@ model {
   // Beta*[a,c] ~ Normal( q / (1 - q + q*n_a) * Sum(B_a,c w/o B), 
   // VARIANCE =                     sigma_c^2  / (1 - q + q*n_a) )
   // so you will have to take the square-root to get sd
-  for(j in 1:1) {
-    for(k in 1:1) {
+  for(j in 1:J) {
+    for(k in 1:K) {
       // ** J is region
       // ** K is beta cofficient
       
@@ -85,11 +85,8 @@ model {
     // finally
     // if there are some variables that are not spatial you could do this differently
     // for some, so ifelse is_spatial 1/0 eiterh mu or beta_star etc
-
-    vector[K] beta;
-    for(k in 1:K) {
-      beta[k] = mu[k] + sigma[k] * beta_star[k,j];
-    }
+    vector[K] beta = mu + beta_star[,j];
+    
     // UPDATED TO INCLUDE SIGMA[J] AFTER LOOKING AT THEIR CODE
     // IS THIS CORRECT ?? DIFFERENT FROM WHAT IT SAYS IN THE PAPER
   
