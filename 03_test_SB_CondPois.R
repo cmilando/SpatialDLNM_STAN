@@ -135,8 +135,8 @@ stan_model <- cmdstan_model("SB_CondPoisson.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
-  chains = 2,
-  parallel_chains = 2 
+  chains = 1,
+  parallel_chains = 1 
 )
 
 #' ////////////////////////////////////////////////////////////////////////////
@@ -145,13 +145,12 @@ out1 <- stan_model$sample(
 #' ============================================================================
 #' #' /////////////////////////////////////////////////////////////////////////
 
-
 ## 
 draws_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
-
+head(draws_df)
 
 # sick that seems to work
 apply(draws_df %>% select(starts_with("beta_out")), 2, median)

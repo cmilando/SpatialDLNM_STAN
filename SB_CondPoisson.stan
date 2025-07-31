@@ -97,7 +97,11 @@ model {
     // first get get the numerator:
     // ok so X[,,J] is N x K, and beta is K x 1
     // so this turns into N x 1
-    vector[N] xBeta = exp(to_matrix(X[, ,j]) * beta);
+    vector[N] xBeta_raw = to_matrix(X[, ,j]) * beta;
+    vector[N] xBeta;
+    for(n in 1:N)
+      xBeta[n] = exp(fmin(20, fmax(xBeta_raw[n], -20)));
+    
     
     // then I think with matrix math you can get the bottom in one shot
     // S is N x N and xBeta is N x 1
@@ -193,4 +197,4 @@ generated quantities {
     dispersion[j] = pearson_x2[j] / df_resid;
   }
 }
-  
+
