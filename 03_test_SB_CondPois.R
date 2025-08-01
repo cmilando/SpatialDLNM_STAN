@@ -131,13 +131,34 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson.stan")
+stan_model <- cmdstan_model("SB_CondPoisson_backup.stan")
+
+# init_f <- function() {
+#   return(list(
+#     #
+#     mu = rep(0, times = K),
+#     sigma = rep(0.5, times = K),
+#     q = 0.5,
+#     z = matrix(0, nrow = K, ncol = J)
+#   ))
+# }
 
 out1 <- stan_model$sample(
   data = stan_data,
+  # init = init_f,
+  # iter_warmup = 1,
+  # iter_sampling = 1,
   chains = 1,
-  parallel_chains = 1 
+  parallel_chains = 1,
+  refresh = 10,
+  max_treedepth = 5
 )
+
+#' full model: 292 seconds, with backup
+#'             12.2 seconds with max_treedepth = 5 !!!!!
+#' central: 47.1 seconds
+#' independent: 29 seconds
+
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -153,14 +174,19 @@ draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
 
 # sick that seems to work
+apply(draws_df %>% select(starts_with("mu")), 2, median)
 apply(draws_df %>% select(starts_with("beta_out")), 2, median)
+apply(draws_df %>% select(starts_with("z")), 2, median)
+apply(draws_df %>% select(starts_with("sigma")), 2, median)
 
+
+# comparison
 modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
                  data = data, family = quasipoisson, 
                  eliminate = factor(stratum))
 coef(modelcpr1)
 
-# q
+# q -- hmm this should be 0.9 almost certainly
 apply(draws_df %>% select(starts_with("q")), 2, summary)
 
 # IT WORKS!!!!! WELL DONE :)

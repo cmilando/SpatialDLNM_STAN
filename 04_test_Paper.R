@@ -43,26 +43,29 @@ load("input/daily_data.RData")
 
 dlnm_var <- list(
   var_prc = c(0.50, 0.90),
-  var_fun = "ns",
-  max_lag = 8,
+  var_fun = "bs",
+  degree = 1,
+  max_lag = 4,
   lagnk = 2,
-  n_reg = 73,
-  n_coef = 12)
+  n_reg = 73)
+
+saveRDS(dlnm_var, "dlnm_configuration.RDS")
 
 # Set variables for trend and seasonality
 
-df_seas <- 4
-df_trend_10years <- 1 # 1 df every 10 years to control for long-term trends
-df_trend <- round(length(2007:2016) / df_trend_10years / 10) # Here we assume the time period for all regions is the same
-rm(df_trend_10years)
-
-dlnm_var$df_seas <- df_seas
-dlnm_var$df_trend <- df_trend
-
 # Subset data to only summer months of 2007 to 2016
+data <- subset(data, month(date) %in% 4:10)
+GLOBAL_RANGE <- range(data$temp)
+GLOBAL_RANGE
 
 data <- subset(data, month(date) %in% 6:9)
 data <- subset(data, year(date) %in% 2007:2016)
+
+data$year <- factor(lubridate::year(data$date))
+
+# SET GLOBAL KNOTS
+GLOBAL_KNOTS <- quantile(data$temp, probs = dlnm_var$var_prc)
+
 
 # Create crossbasis for each region
 
@@ -72,27 +75,35 @@ data <- subset(data, year(date) %in% 2007:2016)
 if(is.unsorted(data$region)) {
   stop("data needs to be ordered by region for the next loop")}
 
-list_cb <- lapply(formatC(1:dlnm_var$n_reg, width = 2, flag = "0"), 
-      function(i_reg) {
-        
-        temp <- subset(data, region == i_reg, 
-                       select = c("temp", paste0("lag", 1:dlnm_var$max_lag)))
-        
-        temp_knots <- quantile(temp$temp, dlnm_var$var_prc, na.rm = TRUE)
-        temp_boundary <- range(temp, na.rm = TRUE)
-        
-        cb <- crossbasis(temp,
-                         argvar = list(fun = dlnm_var$var_fun,
-                                       knots = temp_knots,
-                                       Boundary.knots = temp_boundary),
-                         arglag = list(fun = "ns",
-                                       knots = logknots(dlnm_var$max_lag, 
-                                                        dlnm_var$lagnk),
-                                       intercept = TRUE))
-        
-        cb
-        
-      })
+list_X <- vector("list", dlnm_var$n_reg)
+
+for(i_reg in 1:dlnm_var$n_reg) {
+  
+  temp <- subset(data, region == sprintf("%02i",i_reg),
+                 select = c('temp', paste0('lag', 1:3)))
+  
+  ## 
+  cb <- crossbasis(temp,
+                   argvar = list(fun = 'bs',
+                                 degree = 2,
+                                 knots = GLOBAL_KNOTS,
+                                 Boundary.knots = GLOBAL_RANGE),
+                   arglag = list(fun = "ns",
+                                 #degree = 2,
+                                 knots = logknots(x = 2, 
+                                                  nk = 1),
+                                 intercept = F))
+  
+  dim(cb)
+  head(cb)
+  
+
+  ##
+  list_X[[i_reg]] <- cb
+}
+
+dim(cb)        
+tail(cb)
 
 
 # PREPARE DATA FOR THE CASE-CROSSOVER DESIGN
@@ -214,12 +225,55 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson.stan")
+stan_model <- cmdstan_model("SB_CondPoisson_backup.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 1,
-  parallel_chains = 1 
+  parallel_chains = 1,
+  refresh = 10,
+  max_treedepth = 5
 )
 
+saveRDS(out1, file = "paper_full.RDS")
+out1
+# full model: 4100 seconds!! wow it finished, nice. treedepth 5 
+# mean: 
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Output
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
+options(warn = 1)
+
+## 
+draws_array <- out1$draws()
+
+# Convert to data.frame (flattened, easier to use like extract())
+draws_df <- posterior::as_draws_df(draws_array)
+head(draws_df)
+
+# sick that seems to work
+apply(draws_df %>% select(starts_with("mu")), 2, median)
+apply(draws_df %>% select(starts_with("beta_out")), 2, median)
+apply(draws_df %>% select(starts_with("z")), 2, median)
+apply(draws_df %>% select(starts_with("sigma")), 2, median)
+
+# q -- hmm this should be 0.9 almost certainly
+apply(draws_df %>% select(starts_with("q")), 2, summary)
+
+# IT WORKS!!!!! WELL DONE :)
+
+# ok now check variance of over-dispersion as well
+summary(modelcpr1)
+
+apply(draws_df %>% select(starts_with("disp")), 2, summary)
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Plot?
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
 

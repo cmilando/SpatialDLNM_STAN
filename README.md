@@ -2,6 +2,21 @@
 
 check out `03_test_SB_CondPois.R` for a 2 case test
 
+# use reduce_sum to speed things up
+https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
+
+# lol maybe this doesn't work for multinomial
+https://discourse.mc-stan.org/t/parallelization-in-cmdstanr-using-reduce-sum-on-a-multinomial-likelihood/24607/4
+
+
+
+
+Notes:
+- see here: https://mc-stan.org/docs/stan-users-guide/regression.html#multivariate-hierarchical-priors.section
+
+Wow why are the initial guesses for normal distributions so crazy
+
+
 
 # HAHA and then you have to do crosspred by hand lol
 
