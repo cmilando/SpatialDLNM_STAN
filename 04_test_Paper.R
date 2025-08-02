@@ -132,14 +132,14 @@ J = as.integer(length(data_l))
 N = as.integer(nrow(data_l[[1]]))
 
 # beta values, withouth the intercept
-K = as.integer(ncol(list_cb[[1]]))
+K = as.integer(ncol(list_X[[1]]))
 
 # include the intercept
-X = array(dim = c(dim(list_cb[[1]]), J))
-for(j in 1:J) X[,,j] = as.matrix(list_cb[[j]])
+X = array(dim = c(dim(list_X[[1]]), J))
+for(j in 1:J) X[,,j] = as.matrix(list_X[[j]])
 
 # outcome in two regions
-y = array(dim = c(nrow(list_cb[[1]]), J))
+y = array(dim = c(nrow(list_X[[1]]), J))
 for(j in 1:J) y[,j] = data_l[[j]]$mort
 
 # create S matrix 
@@ -235,7 +235,6 @@ out1 <- stan_model$sample(
   max_treedepth = 5
 )
 
-saveRDS(out1, file = "paper_full.RDS")
 out1
 # full model: 4100 seconds!! wow it finished, nice. treedepth 5 
 # mean: 
@@ -254,6 +253,9 @@ draws_array <- out1$draws()
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
+dim(draws_df)
+saveRDS(draws_df, file = "draws_df.RDS")
+
 
 # sick that seems to work
 apply(draws_df %>% select(starts_with("mu")), 2, median)

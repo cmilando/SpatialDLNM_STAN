@@ -11,7 +11,7 @@ shapefile_bcn <- read_sf("input/shapefile_bcn.shp")
 # WARNING: WE LOAD THE OUTPUT FROM MODEL 3 EXECUTED IN THE PAPER WITH THE 
 # REAL MORTALITY DATA. IT CAN BE REPLACED FOR ANY OF THE OTHER OUTPUTS OBTAINED
 # WITH REAL DATA OR OBTAINED WITH THE PREDICTED DATA FROM CODE 02_run_sbdlm.R
-out1 <- readRDS("paper_full.RDS")
+draws_df <- readRDS("draws_df.RDS")
 
 dlnm_var <- list(
   var_prc = c(0.50, 0.90),
@@ -64,18 +64,10 @@ cb <- lapply(1:dlnm_var$n_reg, function(i_reg) {
 ### (SAME AS FIGURE 4C IN THE PAPER)
 #--------------------------------------------------------------
 
-## 
-out1$save_object()
-out1 <- readRDS("paper_full.RDS")
-out1
-draws_array <- out1$draws()
-
-# Convert to data.frame (flattened, easier to use like extract())
-draws_df <- posterior::as_draws_df(draws_array)
-head(draws_df)
-
 # Calculate directly the RR of the overall cumulative temperature-mortality 
 # associations for all regions
+beta_reg_all <- draws_df %>% select(starts_with("beta_out"))
+
 rr <- lapply(1:dlnm_var$n_reg, function(i_reg) {
   
   # Extract all the iterations of the coefficients of the crossbasis
@@ -83,7 +75,7 @@ rr <- lapply(1:dlnm_var$n_reg, function(i_reg) {
   #                                colnames(winbugs_res))]
   # 
   #   dim(beta_reg) # 1008 (sampled)   x  12 (coefficients)
-  beta_reg <- 
+  beta_reg <- beta_reg_all[,(i_reg * 8 - 7):(i_reg * 8)]
   
   # The RR in each temperature x is the sum of the product of x transformed
   # through the crossbasis function and the coefficients of the crossbasis
