@@ -5,7 +5,7 @@ library(rstan)
 library(cmdstanr)
 library(tidyverse)
 library(foreign) # ENABLES READING THE DATA FILE, WHICH IS A STATA FORMAT
-
+library(shinystan)
 #' ============================================================================
 #' Run model
 #' ============================================================================
@@ -148,17 +148,18 @@ out1 <- stan_model$sample(
   # init = init_f,
   # iter_warmup = 1,
   # iter_sampling = 1,
-  chains = 1,
-  parallel_chains = 1,
+  chains = 4,
+  parallel_chains = 4,
   refresh = 10,
-  max_treedepth = 5
+  seed=1234
+  #max_treedepth = 5
 )
 
 #' full model: 292 seconds, with backup
 #'             12.2 seconds with max_treedepth = 5 !!!!!
 #' central: 47.1 seconds
 #' independent: 29 seconds
-
+shinystan::launch_shinystan(out1)
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -176,7 +177,7 @@ head(draws_df)
 # sick that seems to work
 apply(draws_df %>% select(starts_with("mu")), 2, median)
 apply(draws_df %>% select(starts_with("beta_out")), 2, median)
-apply(draws_df %>% select(starts_with("z")), 2, median)
+apply(draws_df %>% select(starts_with("beta_star")), 2, median)
 apply(draws_df %>% select(starts_with("sigma")), 2, median)
 
 

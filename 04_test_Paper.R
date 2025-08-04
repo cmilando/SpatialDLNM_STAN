@@ -35,6 +35,7 @@ library(rstan)
 library(cmdstanr)
 library(tidyverse)
 library(foreign)
+library(shinystan)
 # Load data
 
 load("input/daily_data.RData")
@@ -43,11 +44,11 @@ load("input/daily_data.RData")
 
 dlnm_var <- list(
   var_prc = c(0.50, 0.90),
-  var_fun = "bs",
-  degree = 1,
-  max_lag = 4,
+  var_fun = "ns",
+  max_lag = 8,
   lagnk = 2,
-  n_reg = 73)
+  n_reg = 73,
+  n_coef = 12)
 
 saveRDS(dlnm_var, "dlnm_configuration.RDS")
 
@@ -84,16 +85,13 @@ for(i_reg in 1:dlnm_var$n_reg) {
   
   ## 
   cb <- crossbasis(temp,
-                   argvar = list(fun = 'bs',
-                                 degree = 2,
-                                 knots = GLOBAL_KNOTS,
+                   argvar = list(fun = dlnm_var$var_fun,
+                               knots = GLOBAL_KNOTS,
                                  Boundary.knots = GLOBAL_RANGE),
                    arglag = list(fun = "ns",
-                                 #degree = 2,
-                                 knots = logknots(x = 2, 
-                                                  nk = 1),
-                                 intercept = F))
-  
+                                 knots = logknots(dlnm_var$max_lag, 
+                                                  dlnm_var$lagnk),
+                                 intercept = TRUE))
   dim(cb)
   head(cb)
   
@@ -229,15 +227,17 @@ stan_model <- cmdstan_model("SB_CondPoisson_backup.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
-  chains = 1,
-  parallel_chains = 1,
+  chains = 4,
+  parallel_chains = 4,
   refresh = 10,
-  max_treedepth = 5
+  max_treedepth = 8
 )
 
 out1
 # full model: 4100 seconds!! wow it finished, nice. treedepth 5 
 # mean: 
+
+shinystan::launch_shinystan(out1)
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -254,7 +254,7 @@ draws_array <- out1$draws()
 draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
 dim(draws_df)
-saveRDS(draws_df, file = "draws_df.RDS")
+saveRDS(draws_df, file = "draws_df_backup.RDS")
 
 
 # sick that seems to work

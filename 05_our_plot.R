@@ -15,11 +15,11 @@ draws_df <- readRDS("draws_df.RDS")
 
 dlnm_var <- list(
   var_prc = c(0.50, 0.90),
-  var_fun = "bs",
-  degree = 1,
-  max_lag = 2,
-  lagnk = 1,
-  n_reg = 73)
+  var_fun = "ns",
+  max_lag = 8,
+  lagnk = 2,
+  n_reg = 73,
+  n_coef = 12)
 
 # DATA PREPARATION
 
@@ -44,20 +44,35 @@ cb <- lapply(1:dlnm_var$n_reg, function(i_reg) {
   
   cb <- crossbasis(matrix(rep(x_temp, dlnm_var$max_lag + 1), 
                           ncol = dlnm_var$max_lag + 1),
-                   argvar = list(fun = 'bs',
-                                 degree = 2,
+                   argvar = list(fun = dlnm_var$var_fun,
                                  knots = GLOBAL_KNOTS,
-                                 Boundary.knots = GLOBAL_BOUNDARY),
+                                 Boundary.knots = GLOBAL_RANGE),
                    arglag = list(fun = "ns",
-                                 #degree = 2,
-                                 knots = logknots(x = 2, 
-                                                  nk = 1),
-                                 intercept = F))
+                                 knots = logknots(dlnm_var$max_lag, 
+                                                  dlnm_var$lagnk),
+                                 intercept = TRUE))
   
   
   return(cb)
   
 })
+
+# ------------------------------------------------------------
+# these should be somewhat similar, no?
+
+# Calculate directly the RR of the overall cumulative temperature-mortality 
+# associations for all regions
+beta_reg_all <- draws_df %>% select(starts_with("beta_out"))
+73 * 12
+apply(beta_reg_all[, 1:12], 2, median)
+
+
+load("past_output/final_simsmatrix_model3_spatial_casecrossover.RData")
+i_reg = 1
+beta_reg <- winbugs_res[,grepl(paste0("^beta\\[", i_reg,","),
+                               colnames(winbugs_res))]
+dim(beta_reg)
+apply(beta_reg, 2, median)
 
 #--------------------------------------------------------------
 ### C) MAP OF THE RISKS AT PERCENTILE 99
@@ -67,6 +82,8 @@ cb <- lapply(1:dlnm_var$n_reg, function(i_reg) {
 # Calculate directly the RR of the overall cumulative temperature-mortality 
 # associations for all regions
 beta_reg_all <- draws_df %>% select(starts_with("beta_out"))
+dim(beta_reg_all)
+
 
 rr <- lapply(1:dlnm_var$n_reg, function(i_reg) {
   
@@ -75,7 +92,7 @@ rr <- lapply(1:dlnm_var$n_reg, function(i_reg) {
   #                                colnames(winbugs_res))]
   # 
   #   dim(beta_reg) # 1008 (sampled)   x  12 (coefficients)
-  beta_reg <- beta_reg_all[,(i_reg * 8 - 7):(i_reg * 8)]
+  beta_reg <- beta_reg_all[,(i_reg * 12 - 11):(i_reg * 12)]
   
   # The RR in each temperature x is the sum of the product of x transformed
   # through the crossbasis function and the coefficients of the crossbasis

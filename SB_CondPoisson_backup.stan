@@ -84,8 +84,9 @@ model {
       
       // Now contruct the beta star mean and sigma
       // remember to square root denom in sigma
+      // since in the paper its for the variance
       star_mean = q / denom * beta_star_sum;
-      star_sd = sigma[k] / (sqrt(denom));
+      star_sd = sigma[k] / sqrt(denom);
       
       // and re-draw
       beta_star[k,j] ~ normal(star_mean, star_sd);
@@ -97,6 +98,8 @@ model {
     // finally
     // if there are some variables that are not spatial you could do this differently
     // for some, so ifelse is_spatial 1/0 eiterh mu or beta_star etc
+    // you don't need to do non-centered here since you 
+    // are drawing directly from beta_star
     // (1) full model
     beta = mu + beta_star[,j];
     
@@ -104,7 +107,7 @@ model {
     // beta = beta_star[,j];
     
     // (3) one beta to rule them all
-    // beta = mu;
+    //beta = mu;
   
     // ********************************
     // from Armstrong 2014, equation (4)
@@ -158,6 +161,7 @@ generated quantities {
     }
   }
   
+  /*
   // (2) apparently you can handle over-dispersion in post-processing as per STATA
   // code, so lets just do that instead of direhclt, which could be another
   // options
@@ -207,4 +211,5 @@ generated quantities {
     // Compute dispersion for this region
     dispersion[j] = pearson_x2[j] / df_resid;
   }
+  */
 }
