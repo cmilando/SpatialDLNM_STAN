@@ -31,17 +31,17 @@ parameters {
   real<lower=0,upper=1> q;
   
   // and then you need Beta* which has dimension K by J
-  // this needs to be defined here so it carries through interations
-  matrix[K, J] beta_star; 
+  matrix[K, J] z; 
   
 }
 
 model {
   
   // set priors
-  mu ~ normal(0, 1);
-  q ~ normal(0, 1) T[0, 1]; // add limits here
-  sigma ~ normal(0, 1) T[0, ]; // add here limits
+  mu ~ std_normal();
+  q ~ std_normal();
+  sigma ~ std_normal();
+  z ~ std_normal();
 
   // loop variables
   real beta_star_sum;
@@ -51,11 +51,12 @@ model {
   real star_sd;
   vector[K] beta;
   vector[N] xBeta;
-  vector[N] xBeta_inner;
   vector[N] denominator;
   vector[N] theta;
   array[max_in_strata] int all_indices;
   int k_not_zero;
+  // and then you need Beta* which has dimension K by J
+  matrix[K, J] beta_star; 
   
   // ********************************
   // OK SO THE MAIN DIFFERENCE TO GET TO Spatial is to adjust the Betas
@@ -74,6 +75,7 @@ model {
       // this gets the dot product
       // beta_star needs to be WITHIN k because you are going within each coefficient
       // but across space (so across the j dimension), and then ` transpose
+      // hmm - this is updated each time, which is probably not correct
       beta_star_sum = Jmat[j, ] * beta_star[k, ]'; 
       
       // next get n_a, which is just the sum of this row of Jmat
@@ -88,10 +90,10 @@ model {
       // remember to square root denom in sigma
       // since in the paper its for the variance
       star_mean = q / denom * beta_star_sum;
-      star_sd = sigma[k]; // / sqrt(denom); maybe this helps
+      star_sd = sigma[k] / sqrt(denom);
       
       // and re-draw
-      beta_star[k,j] ~ normal(star_mean, star_sd);
+      beta_star[k,j] = star_mean + star_sd * z[k, j];
     }
   }
   
@@ -118,11 +120,7 @@ model {
     // first get get the numerator:
     // ok so X[,,J] is N x K, and beta is K x 1
     // so this turns into N x 1
-    // update each sum to control for overflow
-    xBeta_inner = to_matrix(X[, ,j]) * beta;
-    for(n in 1:N) {
-      xBeta[n] = exp(fmin(20, fmax(xBeta_inner[n], -20)));
-    }
+    xBeta = exp(to_matrix(X[, ,j]) * beta);
     
     // then I think with matrix math you can get the bottom in one shot
     // S is N x N and xBeta is N x 1
@@ -147,17 +145,10 @@ model {
        // check that sum theta is ALWAYS = 1 and
        // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
        if(sum(y[all_indices[1:k_not_zero], j]) > 0) {
-         
-         // printout
-         if(is_nan(sum(theta[all_indices[1:k_not_zero]]))) {
-           print("***********************************");
-           print("beta_star = ", beta_star);
-         } else {
-           
-           // just get the values for this strata
-           target += multinomial_lpmf(y[all_indices[1:k_not_zero], j] | 
-                                        theta[all_indices[1:k_not_zero]]);
-         }
+      
+         // just get the values for this strata
+         target += multinomial_lpmf(y[all_indices[1:k_not_zero], j] | 
+                               theta[all_indices[1:k_not_zero]]);
        
        }
     } 

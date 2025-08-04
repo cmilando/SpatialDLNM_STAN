@@ -227,10 +227,10 @@ stan_model <- cmdstan_model("SB_CondPoisson_backup.stan")
 
 out1 <- stan_model$sample(
   data = stan_data,
-  chains = 4,
-  parallel_chains = 4,
+  chains = 1,
+  parallel_chains = 1,
   refresh = 10,
-  max_treedepth = 8
+  max_treedepth = 4
 )
 
 out1

@@ -131,7 +131,7 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson_backup.stan")
+stan_model <- cmdstan_model("SB_CondPoisson_vectorized.stan")
 
 # init_f <- function() {
 #   return(list(
@@ -148,9 +148,9 @@ out1 <- stan_model$sample(
   # init = init_f,
   # iter_warmup = 1,
   # iter_sampling = 1,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 10,
+  chains = 1,
+  parallel_chains = 1,
+  refresh = 50,
   seed=1234
   #max_treedepth = 5
 )
