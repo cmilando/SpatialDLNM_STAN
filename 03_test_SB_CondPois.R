@@ -127,12 +127,13 @@ stan_data <- list(
   n_strata = n_strata,
   max_in_strata = max_in_strata,
   S_condensed = S_condensed,
-  stratum_id = stratum_id
+  stratum_id = stratum_id,
+  model_type = as.integer(1)
 )
 
 # Set path to model
 # https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
-stan_model <- cmdstan_model("SB_CondPoisson_v3.stan")
+stan_model <- cmdstan_model("SB_CondPoisson_v3b.stan")
                             # cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
@@ -140,7 +141,7 @@ out1 <- stan_model$sample(
   chains = 2,
   parallel_chains = 2,
   #threads_per_chain = 1,
-  refresh = 50
+  refresh = 100
 )
 
 #' full model: 292 seconds, with backup
@@ -154,9 +155,35 @@ out1 <- stan_model$sample(
 #' independent: 29 seconds
 # shinystan::launch_shinystan(out1)
 
+## 
+draws_array <- out1$draws()
+
+# Convert to data.frame (flattened, easier to use like extract())
+draws_df <- posterior::as_draws_df(draws_array)
+# dim(draws_df)
+# head(draws_df)
+# data.frame(head(draws_df))
+
+# apply(draws_df %>% select(starts_with("beta")), 2, median)
+
+# Calculate
+# I think this 
+
+beta11 <- draws_df$`mu[1]` + draws_df$`beta_star[1,1]`
+beta12 <- draws_df$`mu[1]` + draws_df$`beta_star[1,2]`
+beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,1]`
+beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,2]`
+
+median(beta11)
+median(beta21)
+
+median(beta12)
+median(beta21)
+
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
 #' Output
+#' >> ADD POST-PROCESSING HERE !
 #' ============================================================================
 #' #' /////////////////////////////////////////////////////////////////////////
 
@@ -165,14 +192,25 @@ draws_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
-dim(draws_df)
+# dim(draws_df)
 # head(draws_df)
+# data.frame(head(draws_df))
 
-# sick that seems to work
-# apply(draws_df %>% select(starts_with("mu")), 2, median)
-apply(draws_df %>% select(starts_with("beta_out")), 2, median)
-# apply(draws_df %>% select(starts_with("beta_star")), 2, median)
-# apply(draws_df %>% select(starts_with("sigma")), 2, median)
+# apply(draws_df %>% select(starts_with("beta")), 2, median)
+
+# Calculate
+# I think this 
+
+beta11 <- draws_df$`mu[1]` + draws_df$`beta_star[1,1]`
+beta12 <- draws_df$`mu[1]` + draws_df$`beta_star[1,2]`
+beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,1]`
+beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,2]`
+
+median(beta11)
+median(beta21)
+
+median(beta12)
+median(beta21)
 
 # comparison
 modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
@@ -185,7 +223,4 @@ apply(draws_df %>% select(starts_with("q")), 2, summary)
 
 # IT WORKS!!!!! WELL DONE :)
 
-# ok now check variance of over-dispersion as well
-summary(modelcpr1)
 
-apply(draws_df %>% select(starts_with("disp")), 2, summary)

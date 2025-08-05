@@ -24,9 +24,15 @@ parameters {
   matrix[K, J] beta;  // attribute effects 
 }
 
-transformed parameters {
+model {
+
+  // now set priors
+  // to_vector doesn't work ... so don't do it
+  for(k in 1:K) {
+      beta[k,] ~ normal(0, 5);
+  }
+
   matrix[N, J] xBeta;
-  matrix[N, J] xBeta_inner;
   matrix[N, J] denominator; 
   matrix[N, J] theta;
   
@@ -49,16 +55,6 @@ transformed parameters {
     // have to use element division
     theta[, j] = xBeta[,j] ./ denominator[, j];
   }
-  
-}
-
-model {
-
-  // now set priors
-  // to_vector doesn't work ... so don't do it
-  for(k in 1:K) {
-      beta[k,] ~ normal(0, 5);
-  }
 
   // and get the model
   for(j in 1:J) {
@@ -76,23 +72,19 @@ model {
       
        // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
        if(sum(y[my_array, j]) > 0) {
-      
-         // just get the values for this strata
-         y[my_array, j] ~ multinomial(theta[my_array, j]);
+          
+        //  
+          if(is_nan(sum(theta[my_array, j]))) {
+            reject("NAN THETA SUM");
+          } else {
+          
+           // just get the values for this strata
+           y[my_array, j] ~ multinomial(theta[my_array, j]);
+          }
        
        }
     }
   }
 }
 
-generated quantities {
-  
-  // (1) make a new BETA by randomly sampling from mu and beta_star
-  matrix[K, J] beta_out;
-  
-  for(k in 1:K) {
-    for(j in 1:J) {
-      beta_out[k,j] = beta[k,j]; // probably some additional variance here
-    }
-  }
-}
+
