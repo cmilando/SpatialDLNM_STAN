@@ -133,14 +133,15 @@ stan_data <- list(
 
 # Set path to model
 # https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
-stan_model <- cmdstan_model("SB_CondPoisson_v3b.stan")
-                            # cpp_options = list(stan_threads = TRUE))
+stan_model <- cmdstan_model("SB_CondPoisson_v3b.stan",
+                            cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
   parallel_chains = 2,
-  #threads_per_chain = 1,
+  max_treedepth = 8,
+  threads_per_chain = 1,
   refresh = 100
 )
 
@@ -160,9 +161,9 @@ draws_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
-# dim(draws_df)
-# head(draws_df)
-# data.frame(head(draws_df))
+dim(draws_df)
+head(draws_df)
+data.frame(head(draws_df))
 
 # apply(draws_df %>% select(starts_with("beta")), 2, median)
 

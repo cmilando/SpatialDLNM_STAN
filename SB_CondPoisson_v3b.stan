@@ -57,9 +57,9 @@ model {
   // --------------------------------------------------------------------------
   // PRIORS
   // --------------------------------------------------------------------------
-  mu ~ std_normal();
-  q ~ std_normal();
-  sigma ~ std_normal();
+  mu ~ normal(0, 5);
+  q ~ cauchy(0, 5);
+  sigma ~ gamma(2, 2);
 
   // --------------------------------------------------------------------------
   // GET BETA STAR
@@ -121,19 +121,19 @@ model {
     // get beta
     
     // (1) fully spatial model
-    if(model_type == 1) {
+    //if(model_type == 1) {
       beta = mu + beta_star[,j];
-    }
+    //}
 
     // (2) Indepdent
-    if(model_type == 2) {
-      beta = beta_star[,j];
-    }
+    //if(model_type == 2) {
+    //  beta = beta_star[,j];
+    //}
     
     // (3) shared
-    if(model_type == 3) {
-      beta = mu;
-    }
+    //if(model_type == 3) {
+    //  beta = mu;
+    //}
  
     // **************************************************************
     // from Armstrong 2014, equation (4)
