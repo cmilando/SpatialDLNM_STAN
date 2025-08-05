@@ -66,6 +66,7 @@ model {
   // VARIANCE =                     sigma_c^2  / (1 - q + q*n_a) )
   // so you will have to take the square-root to get sd
   for(j in 1:J) {
+    
     for(k in 1:K) {
       // ** J is region
       // ** K is beta cofficient
@@ -87,8 +88,9 @@ model {
       // Now contruct the beta star mean and sigma
       // remember to square root denom in sigma
       // since in the paper its for the variance
+      // make sure star_sd is always > 0
       star_mean = q / denom * beta_star_sum;
-      star_sd = sigma[k]; // / sqrt(denom); maybe this helps
+      star_sd = sigma[k] / sqrt(denom); 
       
       // and re-draw
       beta_star[k,j] ~ normal(star_mean, star_sd);

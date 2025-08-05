@@ -131,35 +131,28 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson_vectorized.stan")
-
-# init_f <- function() {
-#   return(list(
-#     #
-#     mu = rep(0, times = K),
-#     sigma = rep(0.5, times = K),
-#     q = 0.5,
-#     z = matrix(0, nrow = K, ncol = J)
-#   ))
-# }
+# https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
+stan_model <- cmdstan_model("SB_CondPoisson_v3.stan")
+                            # cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
   data = stan_data,
-  # init = init_f,
-  # iter_warmup = 1,
-  # iter_sampling = 1,
-  chains = 1,
-  parallel_chains = 1,
-  refresh = 50,
-  seed=1234
-  #max_treedepth = 5
+  chains = 2,
+  parallel_chains = 2,
+  #threads_per_chain = 1,
+  refresh = 50
 )
 
 #' full model: 292 seconds, with backup
 #'             12.2 seconds with max_treedepth = 5 !!!!!
+#'             seed 1234 gives
+#'             80 seconds with vectorization ... and no divergence
+#'             seed 1235 gives no issues
+#'             hmmm but adding the generated quantities did affect this ..
+#'             added 20 seconds onto 80 and increased divergence from 4 to 49%
 #' central: 47.1 seconds
 #' independent: 29 seconds
-shinystan::launch_shinystan(out1)
+# shinystan::launch_shinystan(out1)
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -172,14 +165,14 @@ draws_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
 draws_df <- posterior::as_draws_df(draws_array)
-head(draws_df)
+dim(draws_df)
+# head(draws_df)
 
 # sick that seems to work
-apply(draws_df %>% select(starts_with("mu")), 2, median)
+# apply(draws_df %>% select(starts_with("mu")), 2, median)
 apply(draws_df %>% select(starts_with("beta_out")), 2, median)
-apply(draws_df %>% select(starts_with("beta_star")), 2, median)
-apply(draws_df %>% select(starts_with("sigma")), 2, median)
-
+# apply(draws_df %>% select(starts_with("beta_star")), 2, median)
+# apply(draws_df %>% select(starts_with("sigma")), 2, median)
 
 # comparison
 modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 

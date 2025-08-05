@@ -1,5 +1,5 @@
 data {
-    // First for the spatial component you'll need something similar
+   // First for the spatial component you'll need something similar
   int<lower=1> J; // regions, and each of the params will need a J
   matrix[J, J] Jmat; // Has to be a matrix so you can do math on it
   

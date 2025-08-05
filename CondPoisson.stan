@@ -28,11 +28,8 @@ transformed parameters {
   // ok so X is N x K, and beta is K x 1
   // so this turns into N x 1
   // UPDATE added block to keep exp(inf) or exp(-info)
-  vector[N] xBeta_raw = X * beta;
-  vector[N] xBeta;
-  for (n in 1:N)
-    xBeta[n] = exp(fmin(20, fmax(xBeta_raw[n], -20)));
-  
+  vector[N] xBeta = exp(fmin(20, fmax(X * beta, -20)));
+
   // then I think with matrix math you can get the bottom in one shot
   // S is N x N and xBeta is 
   vector[N] denominator = S * xBeta;

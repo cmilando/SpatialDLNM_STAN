@@ -22,38 +22,52 @@ data {
 
 parameters {
   
-  // Ok so instead, there is a single centering value for each beta
+  // Ok there is a single centering value for each beta
   //  and a single centering value for sigma
-  vector[K] mu;
-  vector<lower=0>[K] sigma;
+  // vector[K] mu;
+  // vector<lower=0>[K] sigma;
 
   // the Leroux value, just one
-  real<lower=0,upper=1> q;
+  // real<lower=0,upper=1> q;
   
   // and then you need Beta* which has dimension K by J
   // this needs to be defined here so it carries through interations
-  matrix[K, J] z; 
+  matrix[K, J] beta_star; 
   
 }
 
-transformed parameters {
+model {
+  
+  // set priors
+  // mu ~ normal(0, 1);
+  // q ~ normal(0, 1); // limits are given above
+  // sigma ~ normal(0, 1); // limits are given above
+  //to_vector(z) ~ normal(0, 1);
   
   //
-  matrix[N, J] theta = rep_matrix(0, N, J);
-  matrix[K, J] beta_star = rep_matrix(0.01, K, J); //Initialize
+  array[max_in_strata] int all_indices;
+  int k_not_zero;
   
-   // loop variables
+  //
+  /*
   vector[K] beta_star_sum;
   real n_a;
   real denom;
   vector[K] star_mean;
   vector[K] star_sd;
+  */
+    
+  // updated coefficients
   vector[K] beta;
+    
+  // element-wise estimates
+  vector[N] theta;
   vector[N] xBeta;
-  vector[N] xBeta_inner;
   vector[N] denominator;
-
   
+  // ********************************
+  // CALCUATE BETA_STAR
+  // ********************************
   // ********************************
   // OK SO THE MAIN DIFFERENCE TO GET TO Spatial is to adjust the Betas
   // by their neighbors
@@ -64,51 +78,71 @@ transformed parameters {
   // so you will have to take the square-root to get sd
   // ** J is region
   // ** K is beta cofficient
+  // NOTE: this has to be done in transformed params because the beta_star_sum
+  // updates each time, so it would be hard to do this also in parallel
+  // BUT MAYBE NOT? Unclear
+  /*
   for(j in 1:J) {
     
     // print("********************************************************");
     // print("j = ", j);
     
-    // ********************************
-    // CALCUATE BETA_STAR
-    // ********************************
-    // next get n_a, which is just the sum of this row of Jmat
-    // HMM DOES THIS INCLUDE ITSELF? Or is this what the 1 is for?
-    // You could always add 1 if so
-    n_a = sum(Jmat[j, ]);
-    // print("n_a = ", n_a);
-      
-    // now you should be able to get the mean and var
-    denom = 1 - q + q * n_a;
-    // print("q = ", q);
+
+    for(k in 1:K) {
     
     // So FIRST, get the sum of BETA STAR neighors that aren't the current one
     // this gets the dot product
     // beta_star needs to be WITHIN k because you are going within each coefficient
     // but across space (so across the j dimension), and then ` transpose
     // OK SO JMAT[j,] Is 1xJ
-    // AND BETA_STAR is KxJ
-    // MEANING THE PRODUCT IS K x 1
+    // AND BETA_STAR is KxJ, so its JxK
+    // MEANING THE PRODUCT IS 1 x K
     // print("beta_star = ", beta_star);
     // print("Jmat = ", Jmat[j, ]);
-    beta_star_sum = to_vector(beta_star * to_matrix(Jmat[j, ])');  // K-length vector
-    // print("beta_star_sum = ", beta_star_sum);
+    // to_matrix enables matrix multiplication
+    // to vector makes it easy to deal with later and smaller
+      beta_star_sum[k] = Jmat[j, ] * beta_star[k,]';  
+      // print("beta_star_sum = ", beta_star_sum);
     
-    // Now contruct the beta star mean and sigma
-    // remember to square root denom in sigma
-    // since in the paper its for the variance
-    star_mean = (q / denom) .* beta_star_sum;
-    // print("star_mean = ", star_mean);
+      // next get n_a, which is just the sum of this row of Jmat
+      // HMM DOES THIS INCLUDE ITSELF? Or is this what the 1 is for?
+      // You could always add 1 if so
+      n_a = sum(Jmat[j, ]);
+      // print("n_a = ", n_a);
+        
+      // now you should be able to get the mean and var
+      denom = 1 - q + q * n_a;
+      // print("q = ", q);
     
-    // element-wise division
-    star_sd = sigma ./ sqrt(denom);
-    // print("star_sd = ", star_sd);
+      
+      // Now contruct the beta star mean and sigma
+      // remember to square root denom in sigma
+      // since in the paper its for the variance
+      // element-wise multiplication
+      star_mean[k] = (q / denom) * beta_star_sum[k];
+      // print("star_mean = ", star_mean);
+      
+      // element-wise division
+      // and set a minimum
+      // unsure if the square root is necesssary, they don't do it
+      // so it must be a typo in the manuscript
+      star_sd[k] = sigma[k] / sqrt(denom);
+      // print("star_sd = ", star_sd);
+  
+      // vectorized draws from normal distributions
+      beta_star[k, j] ~ normal(star_mean[k], star_sd[k]);
+      // beta_star[, j] = star_mean + z[, j] .* star_sd;
+      // print("beta_star = ", beta_star);
+    }
+  }
+  */  
+  //////////////////////////////////////////////////////
+  // SEND TO REDUCE SUM ////////////////////////////////
+  //////////////////////////////////////////////////////
 
-    // vectorized draws from normal distributions
-    // element-wise multiplication
-    beta_star[, j] = star_mean + z[,j] .* star_sd;
-    // print("beta_star = ", beta_star);
-    
+  
+  for(j in 1:J) {
+ 
     // ********************************
     // CALCUATE THETA
     // ********************************
@@ -116,13 +150,16 @@ transformed parameters {
     // for some, so ifelse is_spatial 1/0 eiterh mu or beta_star etc
     // you don't need to do non-centered here since you 
     // are drawing directly from beta_star
+    // Note: why doesn't this include the sigma[j] - I think this
+    // was not implemented correctly in their winbugs model
+    
     // (1) full model
-    beta = mu + beta_star[,j];
+    // beta = mu + beta_star[,j];
     // print("mu = ", mu);
     // print("beta = ", beta);
     
     // (2) independent
-    // beta = beta_star[,j];
+    beta = beta_star[,j];
     
     // (3) one beta to rule them all
     //beta = mu;
@@ -135,13 +172,8 @@ transformed parameters {
     // ok so X[,,J] is N x K, and beta is K x 1
     // so this turns into N x 1
     // update each sum to control for overflow
-    xBeta_inner = to_matrix(X[, ,j]) * beta;
-    for(n in 1:N) {
-      xBeta[n] = exp(fmin(20, fmax(xBeta_inner[n], -20)));
-    }
-    // print("xBeta_inner = ", xBeta_inner);
+    xBeta = exp(fmin(20, fmax(to_matrix(X[, , j]) * beta, -20)));
     // print("xBeta = ", xBeta);
-    
     
     // then I think with matrix math you can get the bottom in one shot
     // S is N x N and xBeta is N x 1
@@ -151,30 +183,11 @@ transformed parameters {
     
     // now get theta
     // have to use element division
-    theta[, j] = xBeta ./ denominator;
+    // gives the THETA for THIS REGION ONLY
+    theta = xBeta ./ denominator;
     // print("theta = ", theta);
     
-  }
-
-}
-
-model {
   
-  // set priors
-  mu ~ normal(0, 1);
-  q ~ normal(0, 1) T[0, 1]; // add limits here
-  sigma ~ normal(0, 1) T[0, ]; // add here limits
-  to_vector(z) ~ normal(0, 1);
-  
-  //  I THINK ALL OF THIS CAN BE A REDUCED SUM
-  
-  //
-  array[max_in_strata] int all_indices;
-  int k_not_zero;
-  
-  for(j in 1:J) {
- 
-    
     // and get the conditional model
     for (i in 1:n_strata) {
        
@@ -199,7 +212,7 @@ model {
            
            // just get the values for this strata
            target += multinomial_lpmf(y[all_indices[1:k_not_zero], j] | 
-                                        theta[all_indices[1:k_not_zero], j]);
+                                        theta[all_indices[1:k_not_zero]]);
          }
        
        }
@@ -214,7 +227,8 @@ generated quantities {
   
   for(k in 1:K) {
     for(j in 1:J) {
-      beta_out[k,j] = mu[k] + beta_star[k,j]; // probably some additional variance here
+      // beta_out[k,j] = mu[k] + beta_star[k,j]; // probably some additional variance here
+      beta_out[k,j] = beta_star[k,j]; // probably some additional variance here
     }
   }
   
