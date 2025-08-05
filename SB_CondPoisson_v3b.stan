@@ -120,22 +120,8 @@ model {
     
     // **************************************************************
     // get beta
-    
-    // (1) fully spatial model
-    //if(model_type == 1) {
       beta = mu + beta_star[,j];
-    //}
 
-    // (2) Indepdent
-    //if(model_type == 2) {
-    //  beta = beta_star[,j];
-    //}
-    
-    // (3) shared
-    //if(model_type == 3) {
-    //  beta = mu;
-    //}
- 
     // **************************************************************
     // from Armstrong 2014, equation (4)
     // theta = exp(X*beta) / sum( exp(X*beta) for all strata)

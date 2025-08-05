@@ -41,7 +41,7 @@ data <- data[order(data$date), ]
 #' #' /////////////////////////////////////////////////////////////////////////
 
 # n regions
-J = as.integer(2)
+J = as.integer(3)
 
 # nrows
 N = as.integer(nrow(data))
@@ -51,15 +51,14 @@ K = as.integer(2)
 
 # include the intercept
 X1 = as.matrix(data[, c('ozone10', 'temperature')])
-X2 = X1
-X = array(dim = c(dim(X1), 2))
+X = array(dim = c(dim(X1), 3))
 X[,,1] = X1
-X[,,2] = X2
+X[,,2] = X1
+X[,,3] = X1
 
 # outcome in two regions
 y1 = as.integer(data$numdeaths)
-y2 = y1
-y = cbind(y1, y2)
+y = cbind(y1, y1, y1)
 
 # create S matrix 
 getSmat <- function(strata_vector, include_self = T) {
@@ -106,9 +105,8 @@ stratum_id
 # ok now do the same as include self but with J matrix
 # start simple and you can generalize later
 # this is an adjacency matrix that DOES NOT include itself
-Jvec <- c(1, 2)
-Jmat <- matrix(as.integer(c(0, 1, 1, 0)), nrow = 2)
-
+Jmat <- matrix(as.integer(c(0, 1, 1, 1, 0, 1, 1, 1, 0)), nrow = J)
+Jmat
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -139,21 +137,19 @@ out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
   parallel_chains = 2,
-  # max_treedepth = 8,
+  max_treedepth = 8,
   threads_per_chain = 1,
   refresh = 100
 )
 
-#' full model: 292 seconds, with backup
-#'             12.2 seconds with max_treedepth = 5 !!!!!
-#'             seed 1234 gives
-#'             80 seconds with vectorization ... and no divergence
-#'             seed 1235 gives no issues
-#'             hmmm but adding the generated quantities did affect this ..
-#'             added 20 seconds onto 80 and increased divergence from 4 to 49%
-#' central: 47.1 seconds
-#' independent: 29 seconds
 # shinystan::launch_shinystan(out1)
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' Output
+#' >> ADD POST-PROCESSING HERE !
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
 
 ## 
 draws_array <- out1$draws()
@@ -171,46 +167,21 @@ data.frame(head(draws_df))
 
 beta11 <- draws_df$`mu[1]` + draws_df$`beta_star[1,1]`
 beta12 <- draws_df$`mu[1]` + draws_df$`beta_star[1,2]`
+beta13 <- draws_df$`mu[1]` + draws_df$`beta_star[1,3]`
+
 beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,1]`
-beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,2]`
+beta22 <- draws_df$`mu[2]` + draws_df$`beta_star[2,2]`
+beta32 <- draws_df$`mu[2]` + draws_df$`beta_star[2,3]`
 
 median(beta11)
 median(beta21)
 
 median(beta12)
-median(beta21)
+median(beta22)
 
-#' ////////////////////////////////////////////////////////////////////////////
-#' ============================================================================
-#' Output
-#' >> ADD POST-PROCESSING HERE !
-#' ============================================================================
-#' #' /////////////////////////////////////////////////////////////////////////
+median(beta13)
+median(beta32)
 
-## 
-draws_array <- out1$draws()
-
-# Convert to data.frame (flattened, easier to use like extract())
-draws_df <- posterior::as_draws_df(draws_array)
-# dim(draws_df)
-# head(draws_df)
-# data.frame(head(draws_df))
-
-# apply(draws_df %>% select(starts_with("beta")), 2, median)
-
-# Calculate
-# I think this 
-
-beta11 <- draws_df$`mu[1]` + draws_df$`beta_star[1,1]`
-beta12 <- draws_df$`mu[1]` + draws_df$`beta_star[1,2]`
-beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,1]`
-beta21 <- draws_df$`mu[2]` + draws_df$`beta_star[2,2]`
-
-median(beta11)
-median(beta21)
-
-median(beta12)
-median(beta21)
 
 # comparison
 modelcpr1 <- gnm(numdeaths ~ ozone10 + temperature, 
