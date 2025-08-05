@@ -127,8 +127,7 @@ stan_data <- list(
   n_strata = n_strata,
   max_in_strata = max_in_strata,
   S_condensed = S_condensed,
-  stratum_id = stratum_id,
-  model_type = as.integer(1)
+  stratum_id = stratum_id
 )
 
 # Set path to model
@@ -140,7 +139,7 @@ out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
   parallel_chains = 2,
-  max_treedepth = 8,
+  # max_treedepth = 8,
   threads_per_chain = 1,
   refresh = 100
 )

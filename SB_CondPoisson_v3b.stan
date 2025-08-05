@@ -18,8 +18,6 @@ data {
   int<lower=1> max_in_strata;
   array[n_strata, max_in_strata] int S_condensed;
   array[N] int<lower=0> stratum_id;
-  
-  int<lower=1> model_type;
 }
 
 transformed data {
@@ -67,39 +65,42 @@ model {
   //       but it just did not work, I think because of the sum
   //       like the star_mean depends on itself.
   // --------------------------------------------------------------------------
-  // real beta_star_sum;
-  vector[K] beta_star_sum;
-  real beta_star_denom;
-  vector[K] star_mean;
-  vector[K] star_sd;
-  
   // ** J is region
   // ** K is beta cofficient
   
+  // furhter vectorized
+  // So FIRST, get the sum of BETA STAR neighors that aren't the current one
+  // this gets the dot product
+  // beta_star needs to be WITHIN k because you are going within each coefficient
+  // but across space (so across the j dimension), and then ` transpose
+  // hmm - this is updated each time, which is probably not correct
+  // Jmat[, j] is  x J
+  // beta_star is K x J so transpose is J x K
+  // to product is 1 x K;
+  // it likes it in vectors so tranpose again? this might be too expensive
+  // this works because beta_star has initial values because its a parameter
+  matrix[K, J] beta_star_sum = beta_star * Jmat; 
+  
+  // in each J a single value for the denominator applied to 
+  // beta star mean and st_dev
+  vector[J] beta_star_denom = 1 - q + q * n_a;
+  
+  vector[K] star_mean;
+  vector[K] star_sd;
+  
   for(j in 1:J) {
     
-    // a single value for the denominator applied to 
-    // beta star mean and st_dev
-    beta_star_denom = 1 - q + q * n_a[j];
+    // you probably could do this as matrices if
+    // you figure out how to create extra rows of 
+    // because you need element-wise multiplication of beta_star_sum
+    // hard to fully remove this anyway because you need
     
-    // So FIRST, get the sum of BETA STAR neighors that aren't the current one
-    // this gets the dot product
-    // beta_star needs to be WITHIN k because you are going within each coefficient
-    // but across space (so across the j dimension), and then ` transpose
-    // hmm - this is updated each time, which is probably not correct
-    // Jmat[, j] is  x J
-    // beta_star is K x J so transpose is J x K
-    // to product is 1 x K;
-    // it likes it in vectors so tranpose again? this might be too expensive
-    // this works because beta_star has initial values because its a parameter
-    beta_star_sum = beta_star * Jmat[, j]; 
-  
     // Now contruct the beta star mean and sigma
     // remember to square root denom in sigma
     // since in the paper its for the variance
     // make sure to use element division and multiplication
-    star_mean = q / beta_star_denom .* beta_star_sum;
-    star_sd = sigma ./ sqrt(beta_star_denom);
+    star_mean = q ./ beta_star_denom[j] .* beta_star_sum[, j];
+    star_sd = sigma ./ sqrt(beta_star_denom[j]);
   
     // and re-draw across K
     beta_star[,j] ~ normal(star_mean, star_sd);
