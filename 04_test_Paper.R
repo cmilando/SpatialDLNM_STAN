@@ -214,14 +214,14 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson_v3b.stan",
+stan_model <- cmdstan_model("SB_CondPoisson_v3b_reduce.stan",
                             cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
   parallel_chains = 2,
-  threads_per_chain = 1,
+  threads_per_chain = 2,
   refresh = 10,
   max_treedepth = 5 # .... ?
 )
@@ -230,6 +230,16 @@ out1 <- stan_model$sample(
 # mean: 
 # 
 # shinystan::launch_shinystan(out1)
+
+
+# LOL THIS IS .... just stupid fast
+stan_model <- cmdstan_model("SB_CondPoisson_v3b_laplace.stan")
+
+out1 <- stan_model$laplace(
+  data = stan_data,
+  refresh = 100
+)
+
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================

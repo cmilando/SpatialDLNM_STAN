@@ -130,7 +130,7 @@ stan_data <- list(
 
 # Set path to model
 # https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
-stan_model <- cmdstan_model("SB_CondPoisson_v3b.stan",
+stan_model <- cmdstan_model("SB_CondPoisson_v3b_reduce.stan",
                             cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
@@ -143,6 +143,16 @@ out1 <- stan_model$sample(
 )
 
 # 165 for tree-depth 8
+
+# LOL THIS IS .... just stupid fast
+stan_model <- cmdstan_model("SB_CondPoisson_v3b_laplace.stan")
+
+out1 <- stan_model$laplace(
+  data = stan_data,
+  refresh = 100
+)
+
+
 
 # shinystan::launch_shinystan(out1)
 
