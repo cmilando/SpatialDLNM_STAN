@@ -125,12 +125,13 @@ stan_data <- list(
   n_strata = n_strata,
   max_in_strata = max_in_strata,
   S_condensed = S_condensed,
-  stratum_id = stratum_id
+  stratum_id = stratum_id,
+  grainsize = as.integer(3)
 )
 
 # Set path to model
 # https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
-stan_model <- cmdstan_model("SB_CondPoisson_v3b_reduce.stan",
+stan_model <- cmdstan_model("SB_CondPoisson_test.stan",
                             cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
@@ -145,12 +146,12 @@ out1 <- stan_model$sample(
 # 165 for tree-depth 8
 
 # LOL THIS IS .... just stupid fast
-stan_model <- cmdstan_model("SB_CondPoisson_v3b_laplace.stan")
-
-out1 <- stan_model$laplace(
-  data = stan_data,
-  refresh = 100
-)
+# stan_model <- cmdstan_model("SB_CondPoisson_v3b_laplace.stan")
+# 
+# out1 <- stan_model$laplace(
+#   data = stan_data,
+#   refresh = 100
+# )
 
 
 
@@ -171,6 +172,8 @@ draws_df <- posterior::as_draws_df(draws_array)
 dim(draws_df)
 head(draws_df)
 data.frame(head(draws_df))
+
+summary(draws_df)
 
 # apply(draws_df %>% select(starts_with("beta")), 2, median)
 

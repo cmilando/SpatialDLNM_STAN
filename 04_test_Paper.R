@@ -218,17 +218,20 @@ stan_data <- list(
 
 # Set path to model
 # always compile with threads, even if you only use 1
-stan_model <- cmdstan_model("SB_CondPoisson.stan",
+stan_model <- cmdstan_model("SB_CondPoisson_test.stan",
                             cpp_options = list(stan_threads = TRUE))
 
-# out1 <- stan_model$sample(
-#   data = stan_data,
-#   chains = 3,
-#   parallel_chains = 3,
-#   threads_per_chain = 2,
-#   refresh = 10,
-#   max_treedepth = 5 # .... ?
-# )
+# --------------
+out1 <- stan_model$sample(
+  data = stan_data,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = 2,
+  refresh = 10,
+  max_treedepth = 6 # .... ?
+)
+
+# with tree-depth = 5 takes 2700 seconds
 
 # Notes
 # - ok so changing max_treedepth can speed things up
@@ -238,13 +241,30 @@ stan_model <- cmdstan_model("SB_CondPoisson.stan",
 # - this also seems to work best on my laptop, rather than the SCC
 # - just based on how cores work perhaps? 
 
+# $sample()	Run CmdStan's "sample" method, return CmdStanMCMC object.
+# $sample_mpi()	Run CmdStan's "sample" method with MPI, return CmdStanMCMC object.
+# $optimize()	Run CmdStan's "optimize" method, return CmdStanMLE object.
+# $variational()	Run CmdStan's "variational" method, return CmdStanVB object.
+# $pathfinder()	Run CmdStan's "pathfinder" method, return CmdStanPathfinder object.
+
+# what about $laplace?
+
+# MPI is what you'd do on the SCC, so likely good to revisit this
+
+#
+
+# ------------------------
 # might be worth it to try these
 # wow this is so fast.
-out1 <- stan_model$variational(
-  data = stan_data,
-  threads = 4,
-  refresh = 10
-)
+# out1 <- stan_model$optimize(
+#   data = stan_data,
+#   threads = 1,
+#   refresh = 50,
+#   iter = 10000
+# )
+# -- optimize doesn't really work
+
+# -- variational doesn't really seem to work
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -260,6 +280,6 @@ draws_array <- out1$draws()
 draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
 dim(draws_df)
-saveRDS(draws_df, file = "draws_df_backup.RDS")
+saveRDS(draws_df, file = "draws_df_no_spatial.RDS")
 
 
