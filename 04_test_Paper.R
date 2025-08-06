@@ -199,6 +199,8 @@ head(Jmat)
 #' ============================================================================
 #' #' /////////////////////////////////////////////////////////////////////////
 
+grainsize = as.integer(4)
+
 stan_data <- list(
   J = J,
   Jmat = Jmat,
@@ -210,55 +212,46 @@ stan_data <- list(
   n_strata = n_strata,
   max_in_strata = max_in_strata,
   S_condensed = S_condensed,
-  stratum_id = stratum_id
+  stratum_id = stratum_id,
+  grainsize = grainsize
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson_v3b_reduce.stan",
+# always compile with threads, even if you only use 1
+stan_model <- cmdstan_model("SB_CondPoisson.stan",
                             cpp_options = list(stan_threads = TRUE))
 
-out1 <- stan_model$sample(
+# out1 <- stan_model$sample(
+#   data = stan_data,
+#   chains = 3,
+#   parallel_chains = 3,
+#   threads_per_chain = 2,
+#   refresh = 10,
+#   max_treedepth = 5 # .... ?
+# )
+
+# Notes
+# - ok so changing max_treedepth can speed things up
+# - but there are also several other STAN algorithms to try
+# - https://mc-stan.org/cmdstanr/reference/CmdStanModel.html#model-fitting
+
+# - this also seems to work best on my laptop, rather than the SCC
+# - just based on how cores work perhaps? 
+
+# might be worth it to try these
+# wow this is so fast.
+out1 <- stan_model$variational(
   data = stan_data,
-  chains = 3,
-  parallel_chains = 3,
-  threads_per_chain = 2,
-  refresh = 10,
-  max_treedepth = 5 # .... ?
+  threads = 4,
+  refresh = 10
 )
-
-# full model: 4100 seconds!! wow it finished, nice. treedepth 5 
-# mean: 
-# 
-# shinystan::launch_shinystan(out1)
-
-
-# LOL THIS IS .... just stupid fast
-stan_model <- cmdstan_model("SB_CondPoisson_v3b_reduce.stan",
-                            cpp_options = list(stan_threads = TRUE))
-
-out1 <- stan_model$laplace(
-  data = stan_data,
-  refresh = 100,threads = 3
-)
-
-out1$output()
-
-stan_model <- cmdstan_model("SB_CondPoisson_v3b_reduce.stan",
-                            cpp_options = list(stan_threads = TRUE))
-
-out1 <- stan_model$pathfinder(
-  data = stan_data,
-  refresh = 100,
-  num_threads = 4
-)
-
-out1$output()
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
-#' Output
+#' Post-process
 #' ============================================================================
 #' #' /////////////////////////////////////////////////////////////////////////
+
 
 ## 
 draws_array <- out1$draws()

@@ -70,6 +70,9 @@ data {
   int<lower=1> max_in_strata;
   array[n_strata, max_in_strata] int S_condensed;
   array[N] int<lower=0> stratum_id;
+  
+  // and 
+  int<lower=1> grainsize; 
 }
 
 transformed data {
@@ -107,8 +110,6 @@ transformed data {
       strata_len[n] = k_not_zero;
   }
   //// ********************************************************
-  
-  int grainsize = 1;
   array[n_strata] int dummy;
   for(n in 1:n_strata) {
     dummy[n] = n;
