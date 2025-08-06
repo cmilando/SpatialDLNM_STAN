@@ -142,6 +142,8 @@ out1 <- stan_model$sample(
   refresh = 100
 )
 
+# 165 for tree-depth 8
+
 # shinystan::launch_shinystan(out1)
 
 #' ////////////////////////////////////////////////////////////////////////////

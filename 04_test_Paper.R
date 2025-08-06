@@ -55,18 +55,10 @@ saveRDS(dlnm_var, "dlnm_configuration.RDS")
 # Set variables for trend and seasonality
 
 # Subset data to only summer months of 2007 to 2016
-data <- subset(data, month(date) %in% 4:10)
-GLOBAL_RANGE <- range(data$temp)
-GLOBAL_RANGE
-
 data <- subset(data, month(date) %in% 6:9)
 data <- subset(data, year(date) %in% 2007:2016)
 
 data$year <- factor(lubridate::year(data$date))
-
-# SET GLOBAL KNOTS
-GLOBAL_KNOTS <- quantile(data$temp, probs = dlnm_var$var_prc)
-
 
 # Create crossbasis for each region
 
@@ -80,22 +72,21 @@ list_X <- vector("list", dlnm_var$n_reg)
 
 for(i_reg in 1:dlnm_var$n_reg) {
   
-  temp <- subset(data, region == sprintf("%02i",i_reg),
-                 select = c('temp', paste0('lag', 1:3)))
+  temp <- subset(data, region == sprintf("%02i",i_reg), 
+                 select = c("temp", paste0("lag", 1:dlnm_var$max_lag)))
   
-  ## 
+  temp_knots <- quantile(temp$temp, dlnm_var$var_prc, na.rm = TRUE)
+  temp_boundary <- range(temp, na.rm = TRUE)
+  
   cb <- crossbasis(temp,
                    argvar = list(fun = dlnm_var$var_fun,
-                               knots = GLOBAL_KNOTS,
-                                 Boundary.knots = GLOBAL_RANGE),
+                                 knots = temp_knots,
+                                 Boundary.knots = temp_boundary),
                    arglag = list(fun = "ns",
                                  knots = logknots(dlnm_var$max_lag, 
                                                   dlnm_var$lagnk),
                                  intercept = TRUE))
-  dim(cb)
-  head(cb)
   
-
   ##
   list_X[[i_reg]] <- cb
 }
@@ -223,29 +214,28 @@ stan_data <- list(
 )
 
 # Set path to model
-stan_model <- cmdstan_model("SB_CondPoisson_backup.stan")
+stan_model <- cmdstan_model("SB_CondPoisson_v3b.stan",
+                            cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
   data = stan_data,
-  chains = 1,
-  parallel_chains = 1,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = 1,
   refresh = 10,
-  max_treedepth = 4
+  max_treedepth = 5 # .... ?
 )
 
-out1
 # full model: 4100 seconds!! wow it finished, nice. treedepth 5 
 # mean: 
-
-shinystan::launch_shinystan(out1)
+# 
+# shinystan::launch_shinystan(out1)
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
 #' Output
 #' ============================================================================
 #' #' /////////////////////////////////////////////////////////////////////////
-
-options(warn = 1)
 
 ## 
 draws_array <- out1$draws()
@@ -256,26 +246,4 @@ head(draws_df)
 dim(draws_df)
 saveRDS(draws_df, file = "draws_df_backup.RDS")
 
-
-# sick that seems to work
-apply(draws_df %>% select(starts_with("mu")), 2, median)
-apply(draws_df %>% select(starts_with("beta_out")), 2, median)
-apply(draws_df %>% select(starts_with("z")), 2, median)
-apply(draws_df %>% select(starts_with("sigma")), 2, median)
-
-# q -- hmm this should be 0.9 almost certainly
-apply(draws_df %>% select(starts_with("q")), 2, summary)
-
-# IT WORKS!!!!! WELL DONE :)
-
-# ok now check variance of over-dispersion as well
-summary(modelcpr1)
-
-apply(draws_df %>% select(starts_with("disp")), 2, summary)
-
-#' ////////////////////////////////////////////////////////////////////////////
-#' ============================================================================
-#' Plot?
-#' ============================================================================
-#' #' /////////////////////////////////////////////////////////////////////////
 

@@ -8,8 +8,7 @@ https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
 # lol maybe this doesn't work for multinomial
 https://discourse.mc-stan.org/t/parallelization-in-cmdstanr-using-reduce-sum-on-a-multinomial-likelihood/24607/4
 
-
-
+check this thread: https://github.com/jr-leary7/bayesVG/issues/3
 
 Notes:
 - see here: https://mc-stan.org/docs/stan-users-guide/regression.html#multivariate-hierarchical-priors.section

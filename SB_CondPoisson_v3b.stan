@@ -22,19 +22,39 @@ data {
 
 transformed data {
   
-  vector[J] n_a;
+  //// ********************************************************
+  // PRECOMPUTE THIS BLOCK IN TRANSFORMED DATA
+  // you could even pre-compute this in transformed data
+  // next get n_a, which is just the sum of this row of Jmat
+  // HMM DOES THIS INCLUDE ITSELF? Or is this what the 1 is for?
+  // You could always add 1 if so
+  row_vector[J] n_a;
   
   for(j in 1:J) {
-    //// ********************************************************
-    // PRECOMPUTE THIS BLOCK IN TRANSFORMED DATA
-    // you could even pre-compute this in transformed data
-    // next get n_a, which is just the sum of this row of Jmat
-    // HMM DOES THIS INCLUDE ITSELF? Or is this what the 1 is for?
-    // You could always add 1 if so
     n_a[j] = sum(Jmat[j, ]);
-    //// ********************************************************
   }
+  //// ********************************************************
   
+  
+   //// ********************************************************
+   // PRECOMPUTE THIS BLOCK IN TRANSFORMED DATA
+   // will have to do something like this: 
+   // https://mc-stan.org/docs/2_21/stan-users-guide/ragged-data-structs-section.html
+   // first get all the strata, which include some spurious 0s
+   // now, subset to just the ones that are not 0
+   // updated to count backwards from the right side
+  
+  array[n_strata] int strata_len;
+  
+  for(n in 1:n_strata) {
+
+       int k_not_zero = 0;
+       for(k in 1:max_in_strata) {
+         if(S_condensed[n, k] > 0) k_not_zero += 1;
+       }
+      strata_len[n] = k_not_zero;
+  }
+  //// ********************************************************
 }
 
 parameters {
@@ -55,9 +75,9 @@ model {
   // --------------------------------------------------------------------------
   // PRIORS
   // --------------------------------------------------------------------------
-  mu ~ normal(0, 5);
-  q ~ cauchy(0, 5);
-  sigma ~ gamma(2, 2);
+  mu ~ std_normal();
+  q ~ std_normal();
+  sigma ~ std_normal();
 
   // --------------------------------------------------------------------------
   // GET BETA STAR
@@ -67,6 +87,7 @@ model {
   // --------------------------------------------------------------------------
   // ** J is region
   // ** K is beta cofficient
+
   
   // furhter vectorized
   // So FIRST, get the sum of BETA STAR neighors that aren't the current one
@@ -83,46 +104,35 @@ model {
   
   // in each J a single value for the denominator applied to 
   // beta star mean and st_dev
-  vector[J] beta_star_denom = 1 - q + q * n_a;
+  row_vector[J] beta_star_denom = 1 - q + q * n_a;
   
-  vector[K] star_mean;
-  vector[K] star_sd;
+  // Now contruct the beta star mean and sigma
+  // remember to square root denom in sigma
+  // since in the paper its for the variance
+  // make sure to use element division and multiplication
+  // broadcast as a row_vector
+  matrix[K,J] star_mean = rep_matrix(q ./ beta_star_denom, K) .* beta_star_sum;
   
-  for(j in 1:J) {
-    
-    // you probably could do this as matrices if
-    // you figure out how to create extra rows of 
-    // because you need element-wise multiplication of beta_star_sum
-    // hard to fully remove this anyway because you need
-    
-    // Now contruct the beta star mean and sigma
-    // remember to square root denom in sigma
-    // since in the paper its for the variance
-    // make sure to use element division and multiplication
-    star_mean = q ./ beta_star_denom[j] .* beta_star_sum[, j];
-    star_sd = sigma ./ sqrt(beta_star_denom[j]);
+  // ok so sigma is a K vector, so assume is K x 1
+  // and beta*_denom is a J row_vector, so assume its 1 x J
+  matrix[K, J] star_sd = rep_matrix(sigma, J) ./ sqrt(rep_matrix(beta_star_denom, K));
   
-    // and re-draw across K
-    beta_star[,j] ~ normal(star_mean, star_sd);
-    
-  }
+  // and Now vectorized priors
+  to_vector(beta_star) ~ normal(to_vector(star_mean), to_vector(star_sd));
 
   // --------------------------------------------------------------------------
   // and get the target
-  // THIS CAN ALL GO TO REDUCE SUM I THINK !
   // --------------------------------------------------------------------------
-  vector[K] beta;
-  vector[N] xBeta;
-  vector[N] theta_denominator; 
-  vector[N] theta;
-  
-  for(j in 1:J) {
-    
-    // **************************************************************
-    // get beta
-      beta = mu + beta_star[,j];
+  // FIRST GET BETA
+  // *****
+  matrix[K, J] beta = rep_matrix(mu, J) + beta_star;
+  // *****
 
-    // **************************************************************
+  // THIS CAN'T BE VEcTORIZED FURTHER BEcUASE OF 
+  // HOW 3D ARRAYS ARE STORED
+  // But you can pre-computed it
+  matrix[N, J] xBeta;
+  for(j in 1:J) {
     // from Armstrong 2014, equation (4)
     // theta = exp(X*beta) / sum( exp(X*beta) for all strata)
     
@@ -131,45 +141,41 @@ model {
     // so this turns into N x 1
     // UPDATE added block to keep exp(inf) or exp(-info)
     // UPDATE to the UPDATE: that block messes things up ... so don't do it
-    xBeta = exp(to_matrix(X[,,j]) * beta);
+    xBeta[,j] = exp(to_matrix(X[,,j]) * beta[,j]);
+  }
   
-    // then I think with matrix math you can get the bottom in one shot
-    // S is N x N and xBeta is 
-    theta_denominator = S * xBeta;
+  // then I think with matrix math you can get the bottom in one shot
+  // S is N x N and xBeta is N x J
+  matrix[N, J] theta_denominator = S * xBeta;
     
-    // now get theta
-    // have to use element division
-    theta = xBeta ./ theta_denominator;
-    
-    for (i in 1:n_strata) {
-       
-       //// ********************************************************
-       // PRECOMPUTE THIS BLOCK IN TRANSFORMED DATA
-       // will have to do something like this: 
-       // https://mc-stan.org/docs/2_21/stan-users-guide/ragged-data-structs-section.html
-       // first get all the strata, which include some spurious 0s
-       array[max_in_strata] int all_indices = to_array_1d(S_condensed[i, ]);
-       
-       // now, subset to just the ones that are not 0
-       int k_not_zero = 0;
-       for(k in 1:max_in_strata) {
-         if(S_condensed[i, k] > 0) k_not_zero += 1;
-       }
-       array[k_not_zero] int my_array = all_indices[1:k_not_zero];
-       //// ********************************************************
+  // now get theta, you can also get in one shot
+  // have to use element division
+  matrix[N, J] theta = xBeta ./ theta_denominator;
+  
+  // THIS CAN ALL GO TO REDUCE SUM I THINK !
+  // https://mc-stan.org/docs/stan-users-guide/parallelization.html
+  // first try and reduce_sum here
+
+  for (i in 1:n_strata) {
+        
+    array[strata_len[i]] int my_array = S_condensed[i, 1:strata_len[i]];
       
+    for(j in 1:J) {
        // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
        if(sum(y[my_array, j]) > 0) {
         
-         if(is_nan(sum(theta[my_array]))) {
-           reject("CHAD TEST: rejecting because sum-theta is nan");
+         if(is_nan(sum(theta[my_array, j]))) {
+           //reject("CHAD TEST: rejecting because sum-theta is nan");
+           // this happens because exp(xBeta) is -inf or inf but
+           // it is too computationally expensive to check each value
+           // or to set limits, so we'll just catch it here
          } else {
            // just get the values for this strata
-           target += multinomial_lpmf(y[my_array, j] | theta[my_array]);
+           target += multinomial_lpmf(y[my_array, j] | theta[my_array, j]);
          }
        
        }
-    }
-  }
+    } // j
+  } // n_strata
 }
 
