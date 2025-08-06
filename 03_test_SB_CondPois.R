@@ -138,7 +138,7 @@ out1 <- stan_model$sample(
   chains = 2,
   parallel_chains = 2,
   max_treedepth = 8,
-  threads_per_chain = 1,
+  threads_per_chain = 2,
   refresh = 100
 )
 

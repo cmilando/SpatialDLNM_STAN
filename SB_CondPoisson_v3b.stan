@@ -1,3 +1,55 @@
+functions {
+  real partial_sum_lpmf(array[] int dummy, 
+                        int start, int end,
+                        data array[] int strata_len,
+                        data array[,] int S_condensed,
+                        data array[,] int y,
+                        data int J,
+                        matrix theta) {
+    
+  // THIS CAN ALL GO TO REDUCE SUM I THINK !
+  // https://mc-stan.org/docs/stan-users-guide/parallelization.html
+  // first try and reduce_sum here
+    
+    // inputs you need:
+    // -- dummy idx as the first argument
+    // -- data array strata_len
+    // -- data array S_condensed
+    // -- 1:n_strata are given by start:end
+    // -- data array y
+    // -- array theta
+
+                          
+    real lupmf = 0;
+
+    for (i in start:end) {
+          
+      array[strata_len[i]] int my_array = S_condensed[i, 1:strata_len[i]];
+        
+      for(j in 1:J) {
+         // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
+         if(sum(y[my_array, j]) > 0) {
+          
+           if(is_nan(sum(theta[my_array, j]))) {
+             //reject("CHAD TEST: rejecting because sum-theta is nan");
+             // this happens because exp(xBeta) is -inf or inf but
+             // it is too computationally expensive to check each value
+             // or to set limits, so we'll just catch it here
+           } else {
+             // just get the values for this strata
+             // USING LUMPF!!! AS PER THIS
+             // https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
+             lupmf += multinomial_lupmf(y[my_array, j] | theta[my_array, j]);
+           }
+         
+         }
+      } // j
+    } // n_strata
+
+    return lupmf;
+  }
+}
+
 data {
     // First for the spatial component you'll need something similar
   int<lower=1> J; // regions, and each of the params will need a J
@@ -55,6 +107,13 @@ transformed data {
       strata_len[n] = k_not_zero;
   }
   //// ********************************************************
+  
+  int grainsize = 1;
+  array[n_strata] int dummy;
+  for(n in 1:n_strata) {
+    dummy[n] = n;
+  }
+  
 }
 
 parameters {
@@ -115,9 +174,10 @@ model {
   
   // ok so sigma is a K vector, so assume is K x 1
   // and beta*_denom is a J row_vector, so assume its 1 x J
-  matrix[K, J] star_sd = rep_matrix(sigma, J) ./ sqrt(rep_matrix(beta_star_denom, K));
+  // sqrt inside rep so it does fewer calculations
+  matrix[K, J] star_sd = rep_matrix(sigma, J) ./ rep_matrix(sqrt(beta_star_denom), K);
   
-  // and Now vectorized priors
+  // and Now vectorized to get priors for beta_star 
   to_vector(beta_star) ~ normal(to_vector(star_mean), to_vector(star_sd));
 
   // --------------------------------------------------------------------------
@@ -152,30 +212,21 @@ model {
   // have to use element division
   matrix[N, J] theta = xBeta ./ theta_denominator;
   
-  // THIS CAN ALL GO TO REDUCE SUM I THINK !
-  // https://mc-stan.org/docs/stan-users-guide/parallelization.html
-  // first try and reduce_sum here
+  /// then reduce sum
 
-  for (i in 1:n_strata) {
-        
-    array[strata_len[i]] int my_array = S_condensed[i, 1:strata_len[i]];
-      
-    for(j in 1:J) {
-       // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
-       if(sum(y[my_array, j]) > 0) {
-        
-         if(is_nan(sum(theta[my_array, j]))) {
-           //reject("CHAD TEST: rejecting because sum-theta is nan");
-           // this happens because exp(xBeta) is -inf or inf but
-           // it is too computationally expensive to check each value
-           // or to set limits, so we'll just catch it here
-         } else {
-           // just get the values for this strata
-           target += multinomial_lpmf(y[my_array, j] | theta[my_array, j]);
-         }
-       
-       }
-    } // j
-  } // n_strata
+  // USING LUMPF HERE !!
+  // https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
+  target += reduce_sum(partial_sum_lupmf, dummy, grainsize,
+                      strata_len, S_condensed, y, J, theta);
+  
+  /*
+  int[] dummy, int start, int end,
+                        data int[] strata_len,
+                        data int[,] S_condensed,
+                        data int[,] y,
+                        data int J,
+                        matrix theta
+  */
+
 }
 
