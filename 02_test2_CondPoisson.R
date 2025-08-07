@@ -116,6 +116,14 @@ cbind("normal" = coef(model_upr)[2:13],
 # 
 
 
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' SETUP inputs
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
+J = as.integer(1)
+
 # nrows
 N = as.integer(nrow(data))
 
@@ -123,11 +131,12 @@ N = as.integer(nrow(data))
 K = as.integer(ncol(cb.temp))
 
 # include the intercept
-X = as.matrix(cb.temp)
-head(X)
+X = array(dim = c(dim(as.matrix(cb.temp)), J))
+X[,,1] <- as.matrix(cb.temp)
 
 # outcome
-y = as.integer(data$numdeaths)
+y1 = as.integer(data$numdeaths)
+y = as.matrix(y1, ncol = 1)
 
 #
 S <- getSmat(data$stratum)
@@ -146,8 +155,25 @@ S_list <- lapply(S_list, function(l) {
 })
 S_condensed <- unique(do.call(rbind, S_list))
 dim(S_condensed)
+
+#
+stratum_id = as.integer(factor(data$stratum))
+stratum_id
+
+## *** THIS BECOMES THE J MATRIX
+Jmat <- matrix(0, nrow = 1, ncol = 1)
+Jmat
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' SETUP inputs
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
   
 stan_data <- list(
+  J = J,
+  Jmat = Jmat,
   N = N, 
   K = K, 
   X = X, 
@@ -155,11 +181,14 @@ stan_data <- list(
   S = S,
   n_strata = n_strata,
   max_in_strata = max_in_strata,
-  S_condensed = S_condensed
+  S_condensed = S_condensed,
+  stratum_id = stratum_id,
+  grainsize = as.integer(3)
 )
 
 # Set path to model
-stan_model <- cmdstan_model("CondPoisson.stan")
+stan_model <- cmdstan_model("CondPoisson_1d.stan", 
+                            cpp_options = list(stan_threads = TRUE))
 
 out1 <- stan_model$sample(
   data = stan_data,
@@ -181,9 +210,6 @@ draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
 
 # sick that seems to work
-apply(draws_df %>% select(starts_with("beta")), 2, median)
-coef(modelcpr1)
-
 cbind("normal" = coef(model_upr)[2:13],
       "conditional" = coef(modelcpr1),
       "STAN" = apply(draws_df %>% select(starts_with("beta")), 2, median))

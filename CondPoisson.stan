@@ -18,7 +18,7 @@ data {
 
 transformed data {
   
-    array[n_strata] int strata_len;
+  array[n_strata] int strata_len;
   
   for(n in 1:n_strata) {
 

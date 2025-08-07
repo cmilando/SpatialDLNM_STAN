@@ -152,13 +152,13 @@ beta_reg1 <- winbugs_res[,grepl(paste0("^beta\\[", i_reg,","),
                                colnames(winbugs_res))]
 
 # but are the same as the base model
-my_output <- readRDS("draws_df_no_spatial_39.RDS")
+my_output <- readRDS("RDS/draws_df_no_spatial_39.RDS")
 cols <- grep(paste0("beta"), names(my_output))
 names(my_output)[cols]
 beta_reg2 <- my_output[, cols]
 head(beta_reg2)
 
-my_output <- readRDS("draws_df_no_spatial.RDS")
+my_output <- readRDS("RDS/draws_df_no_spatial.RDS")
 i_reg <- 39
 cols <- grep(paste0("beta\\[[0-9]+,",i_reg,"\\]"), names(my_output))
 names(my_output)[cols]
