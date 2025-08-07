@@ -16,11 +16,35 @@ data {
   array[n_strata, max_in_strata] int S_condensed;
 }
 
+transformed data {
+  
+    array[n_strata] int strata_len;
+  
+  for(n in 1:n_strata) {
+
+       int k_not_zero = 0;
+       for(k in 1:max_in_strata) {
+         if(S_condensed[n, k] > 0) k_not_zero += 1;
+       }
+      strata_len[n] = k_not_zero;
+  }
+  
+    array[n_strata] int dummy;
+  for(n in 1:n_strata) {
+    dummy[n] = n;
+  }
+}
+
+
 parameters {
   vector[K] beta;  // attribute effects 
 }
 
-transformed parameters {
+model {
+
+  // now set priors
+  beta ~ normal(0, 5);
+
   // from Armstrong 2014, equation (4)
   // theta = exp(X*beta) / sum( exp(X*beta) for all strata)
   
@@ -28,7 +52,8 @@ transformed parameters {
   // ok so X is N x K, and beta is K x 1
   // so this turns into N x 1
   // UPDATE added block to keep exp(inf) or exp(-info)
-  vector[N] xBeta = exp(fmin(20, fmax(X * beta, -20)));
+  // UPDATE ** this really slows things down
+  vector[N] xBeta = exp(X * beta);
 
   // then I think with matrix math you can get the bottom in one shot
   // S is N x N and xBeta is 
@@ -37,26 +62,12 @@ transformed parameters {
   // now get theta
   // have to use element division
   vector[N] theta = xBeta ./ denominator;
-  
-}
-
-model {
-
-  // now set priors
-  beta ~ normal(0, 5);
 
   // and get the model
   for (i in 1:n_strata) {
      
-     // first get all the strata, which include some spurious 0s
-     array[max_in_strata] int all_indices = to_array_1d(S_condensed[i, ]);
-     
-     // now, subset to just the ones that are not 0
-     int k_not_zero = 0;
-     for(k in 1:max_in_strata) {
-       if(S_condensed[i, k] > 0) k_not_zero += 1;
-     }
-     array[k_not_zero] int my_array = all_indices[1:k_not_zero];
+      array[strata_len[i]] int my_array = S_condensed[i, 1:strata_len[i]];
+        
     
      // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
      if(sum(y[my_array]) > 0) {
@@ -64,10 +75,9 @@ model {
        // just get the values for this strata
        y[my_array] ~ multinomial(theta[my_array]);
      
-     }
-  } 
+       }
+  
+  }
 }
 
-// apparently you can handle dispersion in post-processing as per STATA
-// code, so lets just do that instead of direhclt, which could be another
-// options
+

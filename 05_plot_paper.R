@@ -4,6 +4,7 @@ library(dlnm)
 library(sf)
 library(lubridate)
 library(leaflet)
+library(future)
 
 # Load necessary files
 
@@ -13,6 +14,7 @@ shapefile_bcn <- read_sf("input/shapefile_bcn.shp")
 # REAL MORTALITY DATA. IT CAN BE REPLACED FOR ANY OF THE OTHER OUTPUTS OBTAINED
 # WITH REAL DATA OR OBTAINED WITH THE PREDICTED DATA FROM CODE 02_run_sbdlm.R
 load("past_output/final_simsmatrix_model3_spatial_casecrossover.RData")
+load("past_output/final_simsmatrix_model1_independent_casecrossover.RData")
 
 dlnm_var <- list(
   var_prc = c(0.50, 0.90),
@@ -107,20 +109,21 @@ Center_RR <- function(f.rr, f.cen, f.temp){
 ### (SAME AS FIGURE 4C IN THE PAPER)
 #--------------------------------------------------------------
 
-my_output <- readRDS("draws_df_backup.RDS")
+# my_output <- readRDS("draws_df_no_spatial.RDS")
 
 # Calculate directly the RR of the overall cumulative temperature-mortality 
 # associations for all regions
 rr <- lapply(1:dlnm_var$n_reg, function(i_reg) {
   
   # Extract all the iterations of the coefficients of the crossbasis
-  # beta_reg <- winbugs_res[,
-  #                         grepl(paste0("^beta\\[", i_reg,","), colnames(winbugs_res))]
+  beta_reg <- winbugs_res[,
+                          grepl(paste0("^beta\\[", i_reg,","), colnames(winbugs_res))]
 
-  cols <- grep(paste0("beta_star\\[[0-9]+,",i_reg,"\\]"), names(my_output))
-  names(my_output)[cols]
-  beta_reg <- my_output[, cols]
-  head(beta_reg)
+  # cols <- grep(paste0("beta_star\\[[0-9]+,",i_reg,"\\]"), names(my_output))
+  # cols <- grep(paste0("beta\\[[0-9]+,",i_reg,"\\]"), names(my_output))
+  # names(my_output)[cols]
+  # beta_reg <- my_output[, cols]
+  # head(beta_reg)
   
   # The RR in each temperature x is the sum of the product of x transformed
   # through the crossbasis function and the coefficients of the crossbasis
@@ -151,14 +154,19 @@ rr_plot <- sapply(1:dlnm_var$n_reg, function(i_reg) {
                        f.temp = x_plot)
   
   # Point estimate as the median of the values at percentile 99
-  median(exp(rr_plot[percentiles == 0.99,]))
+  xx <- median(exp(rr_plot[percentiles == 0.99,]))
   
+  # *****
+  # uh i think this was added
+  min(2, max(xx, 0.5))
+  # *****
+
 })
 
 summary(rr_plot)
 
 # Set the minimum and maximum RR in the plots
-rr_max <- 2.1
+rr_max <- 2
 rr_min <- exp(-log(rr_max))
 
 # Pallete of colours for the maps
@@ -168,7 +176,41 @@ pal <- colorNumeric(palette = rev(
     "#2E5A87")), domain = c(log(rr_min), log(rr_max)), reverse = FALSE)
 
 # Plot the map with the risks
+# 
+# plot(shapefile_bcn$geometry, col = pal(log(rr_plot)), 
+#      main = "C) Map relative risks")
 
+
+# Compute centroids
+centroids <- sf::st_centroid(shapefile_bcn)
+
+# Extract coordinates of centroids
+coords <- sf::st_coordinates(centroids)
+
+# Plot the map
 plot(shapefile_bcn$geometry, col = pal(log(rr_plot)), 
      main = "C) Map relative risks")
+
+# Add labels
+text(coords[, 1], coords[, 2], labels = 1:nrow(shapefile_bcn), cex = 0.7)
+
+which(Jmat[22,] ==1 )
+
+rr_breaks <- seq(0.5, 2, length.out = 100)
+log_breaks <- log(rr_breaks)
+pal_vals <- pal(length(log_breaks))  # assuming pal is a function like colorRampPalette()
+pal_vals
+library(fields)
+image.plot(
+  legend.only = TRUE,
+  zlim = log(c(rr_min, rr_max)),             # color scale in log space
+  col = pal(seq(log(rr_min), log(rr_max), length.out = 100)),
+  axis.args = list(
+    at = log(c(0.50, 0.59, 0.71, 0.84, 1.00, 1.19, 1.41, 1.68, 2.00)),  # tick positions (log space)
+    labels = c(0.50, 0.59, 0.71, 0.84, 1.00, 1.19, 1.41, 1.68, 2.00)    # tick labels (original RR scale)
+  ),
+  legend.args = list(
+    text = "Relative Risk", side = 3, line = 1, cex = 0.8
+  )
+)
 

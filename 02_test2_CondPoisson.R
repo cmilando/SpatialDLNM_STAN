@@ -1,0 +1,189 @@
+library(dlnm)
+library(splines)
+library(rstan)
+library(cmdstanr)
+library(tidyverse)
+library(foreign) # ENABLES READING THE DATA FILE, WHICH IS A STATA FORMAT
+
+data <- read.dta("https://raw.github.com/gasparrini/2014_armstrong_BMCmrm_codedata/master/londondataset2002_2006.dta")
+
+dlnm_var <- list(
+  var_prc = c(0.50, 0.90),
+  var_fun = "ns",
+  max_lag = 8,
+  lagnk = 2)
+
+# SET THE DEFAULT ACTION FOR MISSING DATA TO na.exclude
+# (MISSING EXCLUDED IN ESTIMATION BUT RE-INSERTED IN PREDICTION/RESIDUALS)
+options(na.action = "na.exclude")
+
+# SCALE EXPOSURE
+data$ozone10 <- data$ozone / 10
+
+# GENERATE MONTH AND YEAR
+# changed the factor part here so it wouldn't carry forwards
+# subset to reduce the no. of factors
+data$month <- months(data$date)
+data$year <- format(data$date, format = "%Y")
+data$dow <- weekdays(data$date)
+
+# make lags
+data$lag1 <- lag(data$temperature, 1)
+data$lag2 <- lag(data$temperature, 2)
+data$lag3 <- lag(data$temperature, 3)
+data$lag4 <- lag(data$temperature, 4)
+data$lag5 <- lag(data$temperature, 5)
+data$lag6 <- lag(data$temperature, 6)
+data$lag7 <- lag(data$temperature, 7)
+data$lag8 <- lag(data$temperature, 8)
+
+# SUBSET TO SUMMER
+data <- subset(data, month %in% c("May", 'June', 'July', 'August', 'September'))
+
+# subset for Excel application
+data$stratum <- interaction(data$year, data$month, data$dow)
+data$stratum
+
+data <- data[order(data$date), ]
+
+# create S matrix 
+getSmat <- function(strata_vector) {
+  
+  # strata_vector <- data$stratum 
+  strata_matrix <- matrix(as.integer(strata_vector), 
+                          nrow = length(strata_vector),
+                          ncol = length(strata_vector), 
+                          byrow = T)
+  
+  for(i in 1:length(strata_vector)) {
+    strata_matrix[i, ] = 1*(strata_matrix[i, ] == as.integer(strata_vector[i]))
+  }
+  
+  return(strata_matrix)
+}
+
+
+
+
+#
+temp <- data[, c("temperature", paste0("lag", 1:dlnm_var$max_lag))]
+
+temp_knots <- quantile(temp$temperature, dlnm_var$var_prc, na.rm = TRUE)
+temp_boundary <- range(temp, na.rm = TRUE)
+
+cb.temp <- crossbasis(temp,
+                 argvar = list(fun = dlnm_var$var_fun,
+                               knots = temp_knots,
+                               Boundary.knots = temp_boundary),
+                 arglag = list(fun = "ns",
+                               knots = logknots(dlnm_var$max_lag, 
+                                                dlnm_var$lagnk),
+                               intercept = TRUE))
+
+# FIT UNCONDITIONAL POISSON MODEL
+model_upr <- glm(numdeaths ~ cb.temp + factor(stratum), 
+                 data = data, family = quasipoisson)
+coef(model_upr)[2:13]
+
+cp1 <- crosspred(cb.temp, model_upr)
+plot(cp1, 'overall')
+
+# FIT A CONDITIONAL POISSON MODEL WITH A YEAR X MONTH X DOW STRATA
+library(gnm)
+
+df_keep <- data %>%
+  group_by(stratum) %>%
+  summarize(
+    .groups = 'keep',
+    sum_deaths = sum(numdeaths)
+  ) %>%
+  mutate(keep  = 1)
+
+data <- left_join(data, df_keep)
+library(gnm)
+modelcpr1 <- gnm(numdeaths ~  cb.temp, 
+                 data = data, family = quasipoisson, 
+                 eliminate = factor(stratum),
+                 subset = keep == 1)
+cp2 <- crosspred(cb.temp, modelcpr1)
+plot(cp2, 'overall')
+
+cbind("normal" = coef(model_upr)[2:13],
+      "conditional" = coef(modelcpr1))
+
+# yeah this is the one
+# https://mc-stan.org/docs/2_20/functions-reference/multinomial-distribution.html
+# 
+
+
+# nrows
+N = as.integer(nrow(data))
+
+# beta and the intercept
+K = as.integer(ncol(cb.temp))
+
+# include the intercept
+X = as.matrix(cb.temp)
+head(X)
+
+# outcome
+y = as.integer(data$numdeaths)
+
+#
+S <- getSmat(data$stratum)
+
+# get strata vars
+n_strata <- as.integer(length(unique(data$stratum))) # 72, cool
+S_list <- apply(S, 1, function(x) which(x == 1))
+max_in_strata <- max(sapply(S_list, length))
+S_list <- lapply(S_list, function(l) {
+  if(length(l) == max_in_strata) {
+    return(l)
+  } else {
+    diff_n = max_in_strata - length(l)
+    return(c(l, rep(0, times = diff_n)))
+  }
+})
+S_condensed <- unique(do.call(rbind, S_list))
+dim(S_condensed)
+  
+stan_data <- list(
+  N = N, 
+  K = K, 
+  X = X, 
+  y = y,
+  S = S,
+  n_strata = n_strata,
+  max_in_strata = max_in_strata,
+  S_condensed = S_condensed
+)
+
+# Set path to model
+stan_model <- cmdstan_model("CondPoisson.stan")
+
+out1 <- stan_model$sample(
+  data = stan_data,
+  chains = 2,
+  iter_warmup = 5000,
+  iter_sampling = 5000,
+  parallel_chains = 2,
+  threads_per_chain = 2,
+  refresh = 500,
+  adapt_delta = 0.8,
+  max_treedepth = 20 # .... ?
+)
+
+## 
+draws_array <- out1$draws()
+
+# Convert to data.frame (flattened, easier to use like extract())
+draws_df <- posterior::as_draws_df(draws_array)
+head(draws_df)
+
+# sick that seems to work
+apply(draws_df %>% select(starts_with("beta")), 2, median)
+coef(modelcpr1)
+
+cbind("normal" = coef(model_upr)[2:13],
+      "conditional" = coef(modelcpr1),
+      "STAN" = apply(draws_df %>% select(starts_with("beta")), 2, median))

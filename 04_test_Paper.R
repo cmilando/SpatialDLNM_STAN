@@ -40,6 +40,8 @@ library(shinystan)
 
 load("input/daily_data.RData")
 
+data <- data %>% filter(region == '39')
+
 # Set variables defining the dlnm model
 
 dlnm_var <- list(
@@ -47,7 +49,8 @@ dlnm_var <- list(
   var_fun = "ns",
   max_lag = 8,
   lagnk = 2,
-  n_reg = 73,
+  n_reg = length(unique(data$region)),
+  reg_names = unique(data$region),
   n_coef = 12)
 
 saveRDS(dlnm_var, "dlnm_configuration.RDS")
@@ -72,7 +75,7 @@ list_X <- vector("list", dlnm_var$n_reg)
 
 for(i_reg in 1:dlnm_var$n_reg) {
   
-  temp <- subset(data, region == sprintf("%02i",i_reg), 
+  temp <- subset(data, region == dlnm_var$reg_names[i_reg], 
                  select = c("temp", paste0("lag", 1:dlnm_var$max_lag)))
   
   temp_knots <- quantile(temp$temp, dlnm_var$var_prc, na.rm = TRUE)
@@ -184,9 +187,10 @@ list_neig <- nb2listw(poly2nb(shapefile_bcn))
 
 neighbors <- lapply(list_neig$neighbours,c)
 Jmat <- matrix(0, nrow = J, ncol = J)
-
-for(j in 1:J) {
-    Jmat[j, neighbors[[j]]] <- 1
+if(j > 1) {
+  for(j in 1:J) {
+      Jmat[j, neighbors[[j]]] <- 1
+  }
 }
 head(Jmat)
 ## ******
@@ -218,17 +222,20 @@ stan_data <- list(
 
 # Set path to model
 # always compile with threads, even if you only use 1
-stan_model <- cmdstan_model("SB_CondPoisson_test.stan",
+stan_model <- cmdstan_model("CondPoisson_1d.stan",
                             cpp_options = list(stan_threads = TRUE))
 
 # --------------
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
+  iter_warmup = 5000,
+  iter_sampling = 5000,
   parallel_chains = 2,
   threads_per_chain = 2,
-  refresh = 10,
-  max_treedepth = 6 # .... ?
+  refresh = 500,
+  adapt_delta = 0.8,
+  max_treedepth = 20 # .... ?
 )
 
 # with tree-depth = 5 takes 2700 seconds
@@ -265,6 +272,10 @@ out1 <- stan_model$sample(
 # -- optimize doesn't really work
 
 # -- variational doesn't really seem to work
+out1_variational <- stan_model$variational(
+  data = stan_data,
+  threads = 2
+  )
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -280,6 +291,8 @@ draws_array <- out1$draws()
 draws_df <- posterior::as_draws_df(draws_array)
 head(draws_df)
 dim(draws_df)
-saveRDS(draws_df, file = "draws_df_no_spatial.RDS")
+summary(draws_df)[, 1:2]
+
+# saveRDS(draws_df, file = "draws_df_no_spatial_39.RDS")
 
 
