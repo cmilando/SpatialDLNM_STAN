@@ -40,8 +40,6 @@ library(shinystan)
 
 load("input/daily_data.RData")
 
-data <- data %>% filter(region == '39')
-
 # Set variables defining the dlnm model
 
 dlnm_var <- list(
@@ -222,10 +220,9 @@ stan_data <- list(
 
 # Set path to model
 # always compile with threads, even if you only use 1
-stan_model <- cmdstan_model("CondPoisson_1d.stan",
+stan_model <- cmdstan_model("SB_CondPoisson.stan",
                             cpp_options = list(stan_threads = TRUE))
 
-# --------------
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
@@ -233,10 +230,32 @@ out1 <- stan_model$sample(
   iter_sampling = 5000,
   parallel_chains = 2,
   threads_per_chain = 2,
-  refresh = 500,
+  refresh = 5,
   adapt_delta = 0.8,
-  max_treedepth = 20 # .... ?
+  max_treedepth = 6 # .... ?
 )
+
+## 
+draws1_array <- out1$draws()
+
+# Convert to data.frame (flattened, easier to use like extract())
+draws1_df <- posterior::as_draws_df(draws1_array)
+head(draws_df)
+
+##
+out2 <- stan_model$variational(
+  data = stan_data,
+  iter = 100000,
+  threads = 4,
+  refresh = 500
+)
+
+## 
+draws2_array <- out2$draws()
+
+# Convert to data.frame (flattened, easier to use like extract())
+draws2_df <- posterior::as_draws_df(draws2_array)
+head(draws2_df)
 
 # with tree-depth = 5 takes 2700 seconds
 
@@ -258,24 +277,6 @@ out1 <- stan_model$sample(
 
 # MPI is what you'd do on the SCC, so likely good to revisit this
 
-#
-
-# ------------------------
-# might be worth it to try these
-# wow this is so fast.
-# out1 <- stan_model$optimize(
-#   data = stan_data,
-#   threads = 1,
-#   refresh = 50,
-#   iter = 10000
-# )
-# -- optimize doesn't really work
-
-# -- variational doesn't really seem to work
-out1_variational <- stan_model$variational(
-  data = stan_data,
-  threads = 2
-  )
 
 #' ////////////////////////////////////////////////////////////////////////////
 #' ============================================================================
@@ -293,6 +294,6 @@ head(draws_df)
 dim(draws_df)
 summary(draws_df)[, 1:2]
 
-# saveRDS(draws_df, file = "draws_df_no_spatial_39.RDS")
+saveRDS(draws_df, file = "RDS/draws_df_final.RDS")
 
 

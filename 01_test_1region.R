@@ -1,3 +1,9 @@
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' COMPARE
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
 library(dlnm)
 library(splines)
 library(rstan)
@@ -63,9 +69,6 @@ getSmat <- function(strata_vector) {
 }
 
 
-
-
-#
 temp <- data[, c("temperature", paste0("lag", 1:dlnm_var$max_lag))]
 
 temp_knots <- quantile(temp$temperature, dlnm_var$var_prc, na.rm = TRUE)
@@ -203,13 +206,38 @@ out1 <- stan_model$sample(
 )
 
 ## 
-draws_array <- out1$draws()
+draws1_array <- out1$draws()
 
 # Convert to data.frame (flattened, easier to use like extract())
-draws_df <- posterior::as_draws_df(draws_array)
+draws1_df <- posterior::as_draws_df(draws1_array)
 head(draws_df)
+
+##
+out2 <- stan_model$variational(
+  data = stan_data,
+  iter = 100000,
+  threads = 4,
+  refresh = 500
+)
+
+#
+## 
+draws2_array <- out2$draws()
+
+# Convert to data.frame (flattened, easier to use like extract())
+draws2_df <- posterior::as_draws_df(draws2_array)
+head(draws2_df)
+
+
+#' ////////////////////////////////////////////////////////////////////////////
+#' ============================================================================
+#' COMPARE
+#' ============================================================================
+#' #' /////////////////////////////////////////////////////////////////////////
+
 
 # sick that seems to work
 cbind("normal" = coef(model_upr)[2:13],
       "conditional" = coef(modelcpr1),
-      "STAN" = apply(draws_df %>% select(starts_with("beta")), 2, median))
+      "MCMC" = apply(draws1_df %>% select(starts_with("beta")), 2, median),
+      "VAR" = apply(draws2_df %>% select(starts_with("beta")), 2, median))
