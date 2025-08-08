@@ -51,7 +51,7 @@ dlnm_var <- list(
   reg_names = unique(data$region),
   n_coef = 12)
 
-saveRDS(dlnm_var, "dlnm_configuration.RDS")
+saveRDS(dlnm_var, "RDS/dlnm_configuration.RDS")
 
 # Set variables for trend and seasonality
 
@@ -223,6 +223,7 @@ stan_data <- list(
 stan_model <- cmdstan_model("SB_CondPoisson.stan",
                             cpp_options = list(stan_threads = TRUE))
 
+# probably takes ~ 6 hours or so
 out1 <- stan_model$sample(
   data = stan_data,
   chains = 2,
@@ -232,7 +233,7 @@ out1 <- stan_model$sample(
   threads_per_chain = 2,
   refresh = 5,
   adapt_delta = 0.8,
-  max_treedepth = 6 # .... ?
+  max_treedepth = 20 # .... ?
 )
 
 ## 
