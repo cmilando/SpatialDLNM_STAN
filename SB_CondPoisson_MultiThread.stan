@@ -1,3 +1,55 @@
+functions {
+  real partial_sum_lpmf(array[] int dummy, 
+                        int start, int end,
+                        data array[] int strata_len,
+                        data array[,] int S_condensed,
+                        data array[,] int y,
+                        data int J,
+                        matrix theta) {
+    
+  // THIS CAN ALL GO TO REDUCE SUM I THINK !
+  // https://mc-stan.org/docs/stan-users-guide/parallelization.html
+  // first try and reduce_sum here
+    
+    // inputs you need:
+    // -- dummy idx as the first argument
+    // -- data array strata_len
+    // -- data array S_condensed
+    // -- 1:n_strata are given by start:end
+    // -- data array y
+    // -- array theta
+
+                          
+    real lupmf = 0;
+
+    for (i in start:end) {
+          
+      array[strata_len[i]] int my_array = S_condensed[i, 1:strata_len[i]];
+        
+      for(j in 1:J) {
+         // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
+         if(sum(y[my_array, j]) > 0) {
+          
+           if(is_nan(sum(theta[my_array, j]))) {
+             //reject("CHAD TEST: rejecting because sum-theta is nan");
+             // this happens because exp(xBeta) is -inf or inf but
+             // it is too computationally expensive to check each value
+             // or to set limits, so we'll just catch it here
+           } else {
+             // just get the values for this strata
+             // USING LUMPF!!! AS PER THIS
+             // https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
+             lupmf += multinomial_lupmf(y[my_array, j] | theta[my_array, j]);
+           }
+         
+         }
+      } // j
+    } // n_strata
+
+    return lupmf;
+  }
+}
+
 data {
     // First for the spatial component you'll need something similar
   int<lower=1> J; // regions, and each of the params will need a J
@@ -130,7 +182,7 @@ model {
   to_vector(beta_star) ~ normal(to_vector(star_mean), to_vector(star_sd));
 
   // --------------------------------------------------------------------------
-  // and get the target components
+  // and get the target
   // --------------------------------------------------------------------------
   // FIRST GET BETA
   // *****
@@ -161,34 +213,21 @@ model {
   // have to use element division
   matrix[N, J] theta = xBeta ./ theta_denominator;
   
-  // --------------------------------------------------------------------------
-  // Finally, the target
-  // --------------------------------------------------------------------------
-  /// then target
-  for (i in 1:n_strata) {
-    
-    // you cant do this in transformed data because
-    // each strata has a different length, so it can't be a 
-    // ragged matrix
-    array[strata_len[i]] int my_array = S_condensed[i, 1:strata_len[i]];
-      
-    for(j in 1:J) {
-       // REMEMBER TO EXCLUDE ANY EMPTY STRATA TO AVOID BIAS
-       if(sum(y[my_array, j]) > 0) {
-        
-         if(is_nan(sum(theta[my_array, j]))) {
-           //reject("CHAD TEST: rejecting because sum-theta is nan");
-           // this happens because exp(xBeta) is -inf or inf but
-           // it is too computationally expensive to check each value
-           // or to set limits, so we'll just catch it here
-         } else {
-           // just get the values for this strata
-          target += multinomial_lpmf(y[my_array, j] | theta[my_array, j]);
-         }
-       
-       }
-    } // j
-  } // n_strata
+  /// then reduce sum
+
+  // USING LUMPF HERE !!
+  // https://mc-stan.org/learn-stan/case-studies/reduce_sum_tutorial.html
+  target += reduce_sum(partial_sum_lupmf, dummy, grainsize,
+                      strata_len, S_condensed, y, J, theta);
+  
+  /*
+  int[] dummy, int start, int end,
+                        data int[] strata_len,
+                        data int[,] S_condensed,
+                        data int[,] y,
+                        data int J,
+                        matrix theta
+  */
 
 }
 

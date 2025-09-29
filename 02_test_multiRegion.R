@@ -220,36 +220,35 @@ stan_data <- list(
 
 # Set path to model
 # always compile with threads, even if you only use 1
-stan_model <- cmdstan_model("SB_CondPoisson.stan",
-                            cpp_options = list(stan_threads = TRUE))
+stan_model <- cmdstan_model("SB_CondPoisson.stan")
 
-# probably takes ~ 6 hours or so
-out1 <- stan_model$sample(
+# # probably takes ~ 6 hours or so
+out2 <- stan_model$sample(
   data = stan_data,
   chains = 2,
-  iter_warmup = 5000,
-  iter_sampling = 5000,
+  iter_warmup = 3000,
+  iter_sampling = 3000,
   parallel_chains = 2,
-  threads_per_chain = 2,
-  refresh = 5,
-  adapt_delta = 0.8,
-  max_treedepth = 20 # .... ?
+  threads_per_chain = 1,
+  refresh = 10,
+  #adapt_delta = 0.8,
+  max_treedepth = 7 # .... ?
 )
-
-## 
-draws1_array <- out1$draws()
-
-# Convert to data.frame (flattened, easier to use like extract())
-draws1_df <- posterior::as_draws_df(draws1_array)
-head(draws_df)
+# 
+# ## 
+# draws1_array <- out1$draws()
+# 
+# # Convert to data.frame (flattened, easier to use like extract())
+# draws1_df <- posterior::as_draws_df(draws1_array)
+# head(draws_df)
 
 ##
-out2 <- stan_model$variational(
-  data = stan_data,
-  iter = 100000,
-  threads = 4,
-  refresh = 500
-)
+# out2 <- stan_model$variational(
+#   data = stan_data,
+#   iter = 100000,
+#   threads = 4,
+#   refresh = 500
+# )
 
 ## 
 draws2_array <- out2$draws()
@@ -257,7 +256,7 @@ draws2_array <- out2$draws()
 # Convert to data.frame (flattened, easier to use like extract())
 draws2_df <- posterior::as_draws_df(draws2_array)
 head(draws2_df)
-
+saveRDS(draws2_df, file = "RDS/draws_df_final.RDS")
 # with tree-depth = 5 takes 2700 seconds
 
 # Notes
@@ -279,22 +278,5 @@ head(draws2_df)
 # MPI is what you'd do on the SCC, so likely good to revisit this
 
 
-#' ////////////////////////////////////////////////////////////////////////////
-#' ============================================================================
-#' Post-process
-#' ============================================================================
-#' #' /////////////////////////////////////////////////////////////////////////
-
-
-## 
-draws_array <- out1$draws()
-
-# Convert to data.frame (flattened, easier to use like extract())
-draws_df <- posterior::as_draws_df(draws_array)
-head(draws_df)
-dim(draws_df)
-summary(draws_df)[, 1:2]
-
-saveRDS(draws_df, file = "RDS/draws_df_final.RDS")
 
 
